@@ -31,6 +31,7 @@ graph TD
     subgraph Subagents [翻譯執行群]
         Sub1["Translator Subagent 1"]
         Sub2["Translator Subagent 2"]
+        QA["QA Subagent<br/>(High Quality 模式)"]
     end
     
     MainAgent -->|"分發任務"| Sub1
@@ -38,6 +39,9 @@ graph TD
     
     Sub1 <-->|"讀取原文 / 寫入譯文"| FS
     Sub2 <-->|"讀取原文 / 寫入譯文"| FS
+    
+    Sub1 <-->|"送交審查與接收建議"| QA
+    Sub2 <-->|"送交審查與接收建議"| QA
 ```
 
 ### 執行流程圖 (Sequence)
@@ -48,7 +52,8 @@ sequenceDiagram
     participant U as 使用者
     participant M as 主 Agent
     participant F as 檔案系統
-    participant S as 子代理群
+    participant S as 翻譯子代理
+    participant Q as QA Subagent
     
     U->>M: 要求翻譯 ePub
     M->>F: 1. 解壓縮
@@ -60,6 +65,15 @@ sequenceDiagram
         M->>M: 5. 依大小組裝任務 (Bin Packing)
         M->>S: 6. 喚醒代理並注入 Prompt 與任務
         S->>F: 7. 記憶體內翻譯與寫入譯文
+        
+        opt High Quality 模式
+            S->>Q: 7.1 喚醒 QA 要求審查
+            Q->>F: 7.2 讀取原文、譯文與風格畫像
+            Q-->>S: 7.3 回報語意問題與修改建議
+            S->>F: 7.4 記憶體內修正並重新寫入譯文
+            Note over S, Q: 重複審查直到 QA 通過
+        end
+        
         F-->>M: 8. 讀取最新狀態
         M->>M: 9. 驗收 (檢查是否截斷或漏翻)
         alt 驗收失敗
@@ -104,7 +118,13 @@ Subagent 在翻譯具體檔案時，遵循一個嚴格的**記憶體內處理 (I
    - 透過 `translation-prompt.md` 的 Few-shot 範例，指示 LLM 在翻譯文字時，必須將原本的 HTML tag（如 `<em>`, `<strong>`）移動到目標語言中對應的字詞上。
 4. **一次性寫入**：翻譯完成後，重組完整的 HTML 結構，使用 `write_to_file` 一次性將整個檔案寫入 `_translated/` 目錄。
 
-### D. 後置處理與打包
+### D. 高質量 QA 模式 (Maker-Checker Architecture)
+為了追求極致的翻譯品質，系統提供了 `--high-quality` 參數來啟用 Maker-Checker 架構：
+1. **動態賦權**：當開啟此模式時，主 Agent 會透過 `define_subagent` 賦予翻譯子代理 (Translator) 呼叫其他子代理的權限。
+2. **深度語意審查 (Deep Semantic Review)**：Translator 在寫入譯文後，會喚醒一個專屬的 `QA Subagent (epub-qa-reviewer)`。QA 會對照 `style_profile.md` 與原文，進行語氣、漏翻、雙關語等深度審查，而非僅僅是結構防呆。
+3. **自我修正迴圈 (Self-Correction Loop)**：建立 `Translator -> QA Reviewer` 的內部工作流。如果 QA 發現問題，會直接提供修改建議，Translator 會在記憶體中修正並重新寫入，直到 QA 審查通過才會向主 Agent 回報進度。這使得主 Agent 的 Context 不會被大量的驗收細節污染，貫徹了職責分離 (Separation of Concerns)。
+
+### E. 後置處理與打包
 1. **翻譯目錄與 Metadata**：主 Agent 接手翻譯 `toc.ncx` / `toc.xhtml`，並更新 `content.opf` 中的 `<dc:language>` 與標題。
 2. **乾淨的 Staging 環境**：建立 `_staging` 目錄，只複製原始 ePub 結構與翻譯後的檔案，過濾掉工作目錄中的 `.md`, `.log` 等暫存檔。
 3. **雙語模式注入 (Bilingual Mode)**：如果開啟雙語模式，子代理會保留原文並加上帶有 `.translated` class 的譯文。主 Agent 則負責在打包前動態注入對應的 CSS 樣式。

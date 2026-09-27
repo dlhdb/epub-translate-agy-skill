@@ -28,6 +28,7 @@ eval_workspace/
 
 - "請幫我評估 `eval_workspace/` 中的翻譯差異。"
 - "Please evaluate the translation differences in the `eval_workspace/` directory."
+- "請幫我評估 `eval_workspace/`，比較標準模式 (v1) 與 High-Quality 模式 (v2) 的翻譯品質差異。"
 
 ---
 

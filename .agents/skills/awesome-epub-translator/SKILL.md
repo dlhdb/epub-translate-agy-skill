@@ -24,6 +24,7 @@ The user provides these when invoking the skill:
 | Output path | No (default: auto) | Custom output file path | `/path/to/output.epub` |
 | Tone/style | No (default: auto-detect) | Style hint for translation | `"formal and academic"` |
 | Pause between rounds | No (default: ask) | Whether to pause after each parallel round for confirmation | `yes`, `no` |
+| Quality mode | No (default: standard) | `standard` = fast, `high-quality` = uses QA Subagent for deep semantic review | `high-quality` |
 
 If the user doesn't specify all required parameters, ask for them before proceeding.
 
@@ -147,6 +148,8 @@ Translation uses up to 3 parallel subagents, each handling a subset of files. Th
 
 Launch up to 3 subagents using the `invoke_subagent` tool (specify all subagents in the `Subagents` array of a single tool call for true parallel execution).
 
+If `--high-quality` is enabled, first ensure the worker subagent type is defined with the ability to invoke subagents. Use `define_subagent` to create/update `awesome-epub-translator-worker` with `enable_subagent_tools: true` and `enable_write_tools: true` before invoking them.
+
 Configure each subagent in the `invoke_subagent` call with `TypeName: awesome-epub-translator-worker`, `Role: Translator Subagent`, and a `Prompt` containing:
 
 1. **Role**: "You are a translation subagent. Translate the assigned XHTML files following the instructions below exactly."
@@ -174,6 +177,8 @@ Configure each subagent in the `invoke_subagent` call with `TypeName: awesome-ep
    fails when it cannot find unique string matches. The `write_to_file`-complete-file
    approach is faster, more reliable, and produces consistent results.
    ```
+9. **QA Mode Directive** (If `--high-quality` is specified, include this):
+   "High Quality Mode is ENABLED. For every file you translate, you MUST perform a Maker-Checker workflow (Step 6.1.5) by defining and invoking a QA Subagent (`epub-qa-reviewer`) to review your translation. You must resolve all issues found by the QA Subagent before reporting success."
 
 ##### 6.1.1: Read the File
 - Use the `view_file` tool to read the XHTML file from the work directory
@@ -233,7 +238,20 @@ Reconstruct the complete XHTML file in memory, then write it in one shot:
 7. **Write the entire file** to `<work_dir>/_translated/<relative_path>` using the **`write_to_file` tool** — this must be the complete file from XML declaration to closing `</html>` tag, in a single Write call
 8. Report: "Translated: <filename> (X/N)"
 
-Each subagent translates its assigned files **sequentially** within its own context, maintaining batch-to-batch "previous context" continuity across files. Steps 6.1.1 through 6.1.4 are repeated for each assigned file.
+##### 6.1.5: QA Review (If High Quality Mode is enabled)
+
+If `--high-quality` is specified, the Translator Subagent MUST perform a Maker-Checker workflow before reporting completion:
+1. Define a QA Subagent (if not already defined) using `define_subagent` tool with name `epub-qa-reviewer` and a system prompt explaining its role as a deep semantic reviewer.
+2. Launch the QA Subagent using `invoke_subagent` and instruct it to read both the original XHTML file and the newly translated XHTML file.
+3. Ask the QA Subagent to perform a **Deep Semantic Review**:
+   - Check if the translation matches the tone and guidelines in `style_profile.md`.
+   - Look for missing translations, awkward phrasing, or stiff literal translations (especially puns/idioms).
+   - Check structural integrity (tags are properly closed, no truncation).
+4. Wait for the QA Subagent's response.
+5. **Self-Correction Loop**: If the QA Subagent reports issues or suggests improvements, you (the Translator) must read the feedback, revise your translation in memory, and rewrite the file. Then ask the QA Subagent to review again.
+6. Once the QA Subagent approves, proceed to the next assigned file or report success.
+
+Each subagent translates its assigned files **sequentially** within its own context, maintaining batch-to-batch "previous context" continuity across files. Steps 6.1.1 through 6.1.5 are repeated for each assigned file.
 
 #### 6.2: Collect and Verify Results
 
