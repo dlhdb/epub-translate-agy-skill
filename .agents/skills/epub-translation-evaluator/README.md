@@ -17,9 +17,8 @@
 ```text
 eval_workspace/
 ├── source/        (放置待測試章節的原文 html/xhtml 檔案)
-├── v1/            (放置舊版 Skill 翻譯出來的對應檔案)
-├── v2/            (放置新版 Skill 翻譯出來的對應檔案)
-└── style_profile.md (可選，該書的翻譯風格指南)
+├── v1/            (放置舊版 Skill 翻譯出來的章節，以及舊版的 style_profile.md)
+└── v2/            (放置新版 Skill 翻譯出來的章節，以及新版的 style_profile.md)
 ```
 *注意：`source/`、`v1/`、`v2/` 裡面的檔案名稱與相對路徑必須完全一致。*
 

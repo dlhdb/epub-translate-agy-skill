@@ -12,10 +12,9 @@ description: 評估並比較兩個 ePub 翻譯版本的品質差異 (A/B 測試�
 
 ## 1. 環境與參數確認
 - 詢問或確認使用者提供的**測試案例目錄**。該目錄必須包含：
-  - `source/`：原文 XHTML 檔案
-  - `v1/`：舊版譯文 XHTML 檔案
-  - `v2/`：新版譯文 XHTML 檔案
-  - (可選) `style_profile.md`：書籍風格指南
+  - `source/`：原文 XHTML 或 HTML 檔案
+  - `v1/`：舊版譯文檔案，以及舊版產生的 `style_profile.md`
+  - `v2/`：新版譯文檔案，以及新版產生的 `style_profile.md`
 - 在該目錄下建立 `_evaluation_work/` 暫存資料夾。
 
 ## 2. 結構快篩 (Structural Validation)
@@ -30,7 +29,7 @@ description: 評估並比較兩個 ePub 翻譯版本的品質差異 (A/B 測試�
 - **派發給子代理的 Prompt 組合**：
   - 讀取 `references/subagent-prompt.md` 作為 System Prompt。
   - 讀取 `references/evaluation-rubric.md` 讓子代理了解標準。
-  - 將原文、V1、V2 對應檔案的內容讀出，一起傳遞給子代理。
+  - 將原文內容，以及 V1 與 V2 各自對應的章節檔案與 `style_profile.md` 一併傳遞給子代理。
 - 指示子代理嚴格按照 JSON 格式回報，並將結果寫入 `_evaluation_work/{chapter_name}.json`。
 
 ## 4. 數據匯總與最終報告
