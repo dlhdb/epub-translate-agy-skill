@@ -64,13 +64,13 @@ sequenceDiagram
         M->>F: 4. 掃描目錄 (跳過已翻譯的檔案)
         M->>M: 5. 依大小組裝任務 (Bin Packing)
         M->>S: 6. 喚醒代理並注入 Prompt 與任務
-        S->>F: 7. 記憶體內翻譯與寫入譯文
+        S->>F: 7. 腳本輔助提取與翻譯，重新注入後寫出
         
         opt High Quality 模式
             S->>Q: 7.1 喚醒 QA 要求審查
             Q->>F: 7.2 讀取原文、譯文與風格畫像
             Q-->>S: 7.3 回報語意問題與修改建議
-            S->>F: 7.4 記憶體內修正並重新寫入譯文
+            S->>F: 7.4 針對 JSON 字典修正並重新注入寫出
             Note over S, Q: 重複審查直到 QA 通過
         end
         
@@ -107,16 +107,16 @@ sequenceDiagram
    - 主 Agent 透過 `invoke_subagent` 工具同時啟動這些子代理。
    - 傳遞給子代理的 Prompt 包含了：`style_profile.md` (風格)、`translation-prompt.md` (翻譯規則)、以及分配到的檔案清單。
 
-### C. 子代理的翻譯策略 (In-memory Translation)
-Subagent 在翻譯具體檔案時，遵循一個嚴格的**記憶體內處理 (In-memory) 策略**：
+### C. 子代理的翻譯策略 (Script-Assisted Translation)
+Subagent 在翻譯具體檔案時，改為使用**腳本輔助 (Script-Assisted) 策略**，以解決大型檔案上下文遺漏與標籤損毀的問題：
 1. **禁用 Replace 工具**：明確禁止使用 `replace_file_content`（尋找與取代），因為在大型 HTML 檔案中找獨特字串很容易失敗且消耗大量 Context。
-2. **Batch Processing**：
-   - 使用 `view_file` 讀取整個 XHTML。
-   - 在記憶體中將 HTML 元素（如 `<p>`, `<h1>`）依據語意邊界分批（每批約 2000-3000 字元）。
-   - 保留上一批的最後幾個段落作為 Context（不重新翻譯），以維持上下文連貫性。
-3. **保留標籤 (Inline Tag Preservation)**：
+2. **提取文本 (Extract)**：
+   - 使用 `epub_translator_utils.py extract` 讀取 XHTML，將所有區塊級標籤（如 `<p>`, `<h1>`）的內容與字元偏移量提取至 JSON 字典檔。
+3. **字典翻譯與保留標籤 (Dictionary Translation & Inline Tag Preservation)**：
+   - Agent 讀取 JSON 字典檔並在記憶體中分批翻譯 `text` 欄位。
    - 透過 `translation-prompt.md` 的 Few-shot 範例，指示 LLM 在翻譯文字時，必須將原本的 HTML tag（如 `<em>`, `<strong>`）移動到目標語言中對應的字詞上。
-4. **一次性寫入**：翻譯完成後，重組完整的 HTML 結構，使用 `write_to_file` 一次性將整個檔案寫入 `_translated/` 目錄。
+4. **注入與寫出 (Inject)**：
+   - 翻譯完成後，使用 `epub_translator_utils.py inject` 將翻譯好的字典由後往前精準替換回原始 XHTML 中，一次性輸出到 `_translated/` 目錄，確保 100% 的結構一致性。
 
 ### D. 高質量 QA 模式 (Maker-Checker Architecture)
 為了追求極致的翻譯品質，系統提供了 `--high-quality` 參數來啟用 Maker-Checker 架構：

@@ -167,15 +167,19 @@ Configure each subagent in the `invoke_subagent` call with `TypeName: awesome-ep
 8. **Critical strategy directive** (include this verbatim in every subagent prompt):
    ```
    TRANSLATION STRATEGY — READ THIS FIRST:
-   For each file, you MUST follow this exact approach:
-   1. Read the entire XHTML file using the `view_file` tool
-   2. Translate all translatable content in memory
-   3. Write the COMPLETE translated file using the `write_to_file` tool in ONE operation
-
-   Do NOT use the `replace_file_content` tool for translation. The Edit/find-replace approach is
-   too slow for large files, will exhaust your context window, and frequently
-   fails when it cannot find unique string matches. The `write_to_file`-complete-file
-   approach is faster, more reliable, and produces consistent results.
+   For complex or large XHTML files (especially those with many spans, links, or nested formatting), DO NOT rely purely on memory translation. Instead, use the built-in Script-Assisted Translation tool:
+   
+   1. Extract the text to a JSON dictionary using the skill's utility script:
+      `python3 .agents/skills/awesome-epub-translator/scripts/epub_translator_utils.py extract <input_html> <scratch/dict.json>`
+      (This creates a JSON file where each block has a `start`, `end`, and `text` field).
+   2. Read the JSON file, translate the `text` field of each block in memory in batches, and write a new JSON dictionary with the translated values to `scratch/translated_dict.json`. DO NOT modify the `start` and `end` fields!
+   3. Inject the translated dictionary back into the XHTML:
+      `python3 .agents/skills/awesome-epub-translator/scripts/epub_translator_utils.py inject <input_html> <scratch/translated_dict.json> <output_html>`
+   4. Verify the final HTML is correct.
+   
+   CRITICAL FILE MANAGEMENT: Always place your temporary JSON dictionaries in your `scratch/` directory. Delete them when you are done.
+   
+   Do NOT use the `replace_file_content` tool for translation. The Script-Assisted approach is faster, more reliable, and guarantees 100% structural fidelity.
    ```
 9. **QA Mode Directive** (If `--high-quality` is specified, include this):
    "High Quality Mode is ENABLED. For every file you translate, you MUST perform a Maker-Checker workflow (Step 6.1.5) by defining and invoking a QA Subagent (`epub-qa-reviewer`) to review your translation. You must resolve all issues found by the QA Subagent before reporting success."
