@@ -16,8 +16,16 @@
 您可以透過自然語言指定更多細節：
 - **雙語模式**："幫我翻譯 `book.epub` 成中文，請使用**雙語對照模式 (bilingual mode)**。"
 - **指定風格**："將這本小說翻譯成日文，請使用**輕鬆幽默的語氣**。"
-- **高質量 QA 模式**："翻譯 `book.epub` 到繁體中文，請**啟用高質量模式 (--high-quality)** 進行深度語意審查。"
+- **高品質 QA 模式**："翻譯 `book.epub` 到繁體中文，請**啟用高品質模式 (--high-quality)** 進行深度語意審查。"
+- **指定子代理模型**："翻譯 `book.epub` 到繁體中文，翻譯模型請使用 `--translator-model google/gemini-flash-lite-latest`，QA 審查請使用 `--qa-model google/gemini-flash-latest`。"
 - **自訂輸出路徑**："翻譯完成後，請將檔案另存到 `~/Desktop/translated_book.epub`。"
+
+### 完整範例 (Full Example)
+您可以將多項參數整合為一個完整指令，一次指定雙語對照、高品質審查以及自訂模型：
+- **中文範例**：
+  > "翻譯 `/path/to/book.epub` 到繁體中文，啟用高品質模式，使用雙語對照模式，翻譯模型指定為 `google/gemini-flash-lite-latest`，QA 審查模型指定為 `google/gemini-flash-latest`。"
+- **英文範例**：
+  > "Translate `/path/to/book.epub` to Traditional Chinese in bilingual mode with `--high-quality`, using `--translator-model google/gemini-flash-lite-latest` and `--qa-model google/gemini-flash-latest`."
 
 ---
 

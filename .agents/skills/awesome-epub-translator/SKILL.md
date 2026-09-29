@@ -25,6 +25,8 @@ The user provides these when invoking the skill:
 | Tone/style | No (default: auto-detect) | Style hint for translation | `"formal and academic"` |
 | Pause between rounds | No (default: ask) | Whether to pause after each parallel round for confirmation | `yes`, `no` |
 | Quality mode | No (default: standard) | `standard` = fast, `high-quality` = uses QA Subagent for deep semantic review | `high-quality` |
+| Translator model | No (default: `google/gemini-flash-lite-latest`) | Model for translation subagents via `--translator-model` | `google/gemini-flash-lite-latest`, `anthropic/claude-3-7-sonnet` |
+| QA model | No (default: `google/gemini-flash-latest`) | Model for QA reviewer subagents via `--qa-model` | `google/gemini-flash-latest`, `google/gemini-2.5-pro` |
 
 If the user doesn't specify all required parameters, ask for them before proceeding.
 
@@ -146,43 +148,28 @@ Translation uses up to 3 parallel subagents, each handling a subset of files. Th
 
 #### 6.1: Dispatch Subagents
 
-Launch up to 3 subagents using the `invoke_subagent` tool (specify all subagents in the `Subagents` array of a single tool call for true parallel execution).
+Launch up to 3 subagents concurrently using the `subagent` tool. Use the pre-defined specialized translation agent: `agent: "epub-translator"`.
 
-If `--high-quality` is enabled, first ensure the worker subagent type is defined with the ability to invoke subagents. Use `define_subagent` to create/update `awesome-epub-translator-worker` with `enable_subagent_tools: true` and `enable_write_tools: true` before invoking them.
+**Model Parameterization:**
+- **Translation Subagent (`epub-translator`)**:
+  - If the user specified `--translator-model`, pass `model: "<specified_model>"` in the subagent call.
+  - If not specified, **omit the `model` parameter entirely** so `epub-translator` automatically uses its pre-configured model (`google/gemini-flash-lite-latest` from `.opencode/agents/epub-translator.md`).
+- **QA Subagent (`epub-qa-reviewer`)**:
+  - If the user specified `--qa-model`, pass `model: "<specified_model>"` in the subagent call.
+  - If not specified, **omit the `model` parameter entirely** so `epub-qa-reviewer` automatically uses its pre-configured model (`google/gemini-flash-latest` from `.opencode/agents/epub-qa-reviewer.md`).
 
-Configure each subagent in the `invoke_subagent` call with `TypeName: awesome-epub-translator-worker`, `Role: Translator Subagent`, and a `Prompt` containing:
-
-1. **Role**: "You are a translation subagent. Translate the assigned XHTML files following the instructions below exactly."
-2. **Style profile** (inline content, NOT a file path):
-   ```
-   [STYLE PROFILE]
-   <paste full content of style_profile.md>
-   [END STYLE PROFILE]
-   ```
-3. **Translation prompt template** (inline content of `references/translation-prompt.md`)
-4. **Work directory path**: `<work_dir>`
-5. **Target language**, **source language**, and **output mode** (pure or bilingual)
-6. **Assigned files list**: each entry includes the relative path, spine order index, and file size (e.g., "File 3/15: OEBPS/Text/chapter_03.xhtml (85 KB)")
-7. **Complete translation instructions** (Steps 6.1.1–6.1.5 below)
-8. **Critical strategy directive** (include this verbatim in every subagent prompt):
-   ```
-   TRANSLATION STRATEGY — READ THIS FIRST:
-   For complex or large XHTML files (especially those with many spans, links, or nested formatting), DO NOT rely purely on memory translation. Instead, use the built-in Script-Assisted Translation tool:
-   
-   1. Extract the text to a JSON dictionary using the skill's utility script:
-      `python3 .agents/skills/awesome-epub-translator/scripts/epub_translator_utils.py extract <input_html> <scratch/dict.json>`
-      (This creates a JSON file where each block has a `start`, `end`, and `text` field).
-   2. Read the JSON file, translate the `text` field of each block in memory in batches, and write a new JSON dictionary with the translated values to `scratch/translated_dict.json`. DO NOT modify the `start` and `end` fields!
-   3. Inject the translated dictionary back into the XHTML:
-      `python3 .agents/skills/awesome-epub-translator/scripts/epub_translator_utils.py inject <input_html> <scratch/translated_dict.json> <output_html>`
-   4. Verify the final HTML is correct.
-   
-   CRITICAL FILE MANAGEMENT: Always place your temporary JSON dictionaries in your `scratch/` directory. Delete them when you are done.
-   
-   Do NOT use the `replace_file_content` tool for translation. The Script-Assisted approach is faster, more reliable, and guarantees 100% structural fidelity.
-   ```
-9. **QA Mode Directive** (If `--high-quality` is specified, include this):
-   "High Quality Mode is ENABLED. For every file you translate, you MUST perform a Maker-Checker workflow (Step 6.1.5) by defining and invoking a QA Subagent (`epub-qa-reviewer`) to review your translation. You must resolve all issues found by the QA Subagent before reporting success."
+Configure each translation subagent call with:
+- **agent**: `epub-translator`
+- **description**: `Translate batch (X chapters)`
+- **model**: `<translator_model>` (optional, include only if explicitly specified by user)
+- **background**: `true` (for parallel background execution)
+- **prompt**: A structured task payload containing:
+  1. **Work directory**: `<work_dir>`
+  2. **Target language** and **Source language**
+  3. **Output mode**: `pure` or `bilingual`
+  4. **Assigned files**: List of relative paths (e.g., `OEBPS/Text/chapter_01.xhtml`, size, spine index)
+  5. **Style profile path**: `<work_dir>/_translated/style_profile.md` (the subagent will read this directly)
+  6. **QA Mode Directive** (if `--high-quality` is specified): "High Quality Mode is ENABLED. Each translated chapter must be verified via the `epub-qa-reviewer` subagent before completion."
 
 ##### 6.1.1: Read the File
 - Use the `view_file` tool to read the XHTML file from the work directory
@@ -244,16 +231,16 @@ Reconstruct the complete XHTML file in memory, then write it in one shot:
 
 ##### 6.1.5: QA Review (If High Quality Mode is enabled)
 
-If `--high-quality` is specified, the Translator Subagent MUST perform a Maker-Checker workflow before reporting completion:
-1. Define a QA Subagent (if not already defined) using `define_subagent` tool with name `epub-qa-reviewer` and a system prompt explaining its role as a deep semantic reviewer.
-2. Launch the QA Subagent using `invoke_subagent` and instruct it to read both the original XHTML file and the newly translated XHTML file.
-3. Ask the QA Subagent to perform a **Deep Semantic Review**:
-   - Check if the translation matches the tone and guidelines in `style_profile.md`.
-   - Look for missing translations, awkward phrasing, or stiff literal translations (especially puns/idioms).
-   - Check structural integrity (tags are properly closed, no truncation).
-4. Wait for the QA Subagent's response.
-5. **Self-Correction Loop**: If the QA Subagent reports issues or suggests improvements, you (the Translator) must read the feedback, revise your translation in memory, and rewrite the file. Then ask the QA Subagent to review again.
-6. Once the QA Subagent approves, proceed to the next assigned file or report success.
+If `--high-quality` is specified, the translation undergoes a Maker-Checker review before final checkpoint approval:
+1. Dispatch the pre-defined QA Subagent: `agent: "epub-qa-reviewer"` (omit `model` so it automatically uses its pre-configured `google/gemini-flash-latest`, or use `<qa_model>` if explicitly specified).
+2. Provide the QA Subagent with the source file path (`<work_dir>/<relative_path>`), the newly translated file path (`<work_dir>/_translated/<relative_path>`), and the style profile path (`<work_dir>/_translated/style_profile.md`).
+3. The QA Subagent conducts a **Deep Semantic Review**:
+   - Compares source vs. translated text against `style_profile.md`.
+   - Checks for missing translations, awkward phrasing, or stiff literal translations.
+   - Verifies structural integrity (tags are properly closed, no truncation, code blocks untouched).
+4. Wait for the QA Subagent's structured report and rubric score.
+5. **Self-Correction Loop**: If the QA Subagent reports `NEEDS_REVISION`, the Translator reads the actionable feedback, revises the translation in memory, rewrites the file in one shot using `write`, and requests re-review.
+6. Once the QA Subagent marks `APPROVED` (or rubric score >= 4), proceed to the next assigned file or report success.
 
 Each subagent translates its assigned files **sequentially** within its own context, maintaining batch-to-batch "previous context" continuity across files. Steps 6.1.1 through 6.1.5 are repeated for each assigned file.
 
