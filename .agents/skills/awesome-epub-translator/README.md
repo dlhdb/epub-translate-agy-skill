@@ -1,12 +1,12 @@
-# Awesome ePub Translator (Antigravity Skill)
+# Awesome ePub Translator (OpenCode Skill)
 
-這是一個專為 Antigravity 環境打造的電子書自動翻譯技能（Workspace Skill）。本技能透過多代理（Multi-Agent）並行處理技術，能夠在保留原始排版、圖片與程式碼結構的前提下，將整本 ePub 電子書翻譯為您指定的目標語言。
+這是一個專為 OpenCode 環境打造的電子書自動翻譯技能。本技能透過多代理（Multi-Agent）並行處理技術，能夠在保留原始排版、圖片與程式碼結構的前提下，將整本 ePub 電子書翻譯為您指定的目標語言。
 
 ---
 
 ## 🚀 使用方式 (Usage)
 
-本技能已經整合至您的 Antigravity 環境中。您不需要輸入複雜的指令，只需在對話框中直接要求 Agent 進行翻譯即可。
+本技能已經整合至您的 OpenCode 環境中。您不需要輸入複雜的指令，只需在對話框中直接要求 Agent 進行翻譯即可。
 
 ### 基本範例
 - "Translate `/path/to/my_book.epub` to Traditional Chinese."
@@ -34,11 +34,11 @@
 1. **風格畫像 (Style Profile)**：
    翻譯開始前，系統會先閱讀前幾個章節，自動提取書籍的文體、語氣與詞彙習慣（例如：學術嚴謹、或是輕鬆對話），並在後續的所有翻譯中保持這個風格。
 2. **多代理並行加速 (Parallel Subagents)**：
-   自動根據檔案大小進行智能分配，透過 Antigravity 的 `invoke_subagent` 呼叫最多 3 個子代理同時進行翻譯，大幅提升翻譯長篇書籍的速度。
+   自動根據檔案大小進行智能分配，透過 OpenCode 的 `subagent` 工具呼叫最多 3 個子代理人 (`epub-translator`) 同時進行翻譯，大幅提升長篇書籍翻譯速度。
 3. **無縫雙語模式 (Bilingual Mode)**：
    除了純譯本外，支援產生中英（或原譯）對照的排版，並自動注入專屬的 CSS 樣式，方便語言學習者閱讀。
 4. **高品質 Maker-Checker 語意審查 (High Quality QA)**：
-   在 `--high-quality` 模式下，主協調者採用星狀架構調度獨立的 QA 審查員 (`epub-qa-reviewer`) 進行深度語意與標籤檢查；若發現漏翻或生硬句法即啟動自我糾錯迴圈，同時 100% 相容 OpenCode 與 Antigravity。
+   在 `--high-quality` 模式下，主協調者採用星狀架構調度獨立的 QA 審查員 (`epub-qa-reviewer`) 進行深度語意與標籤檢查；若發現漏翻或生硬句法即啟動自我糾錯迴圈，自動完成修正。
 5. **自動斷點續傳 (Resumability)**：
    翻譯過程會建立 `_translation_work/` 暫存目錄並記錄審查狀態。如果遇到網路中斷或 Token 耗盡，重新要求翻譯同一個檔案時，系統會自動跳過已完成審查的章節。
 

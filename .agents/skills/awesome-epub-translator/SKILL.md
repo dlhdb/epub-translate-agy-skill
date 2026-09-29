@@ -67,10 +67,10 @@ Follow these steps in exact order. Do not skip steps. Read `references/epub-stru
 
 ### Step 4: Locate content.opf
 
-1. Read `<work_dir>/META-INF/container.xml` with the `view_file` tool
+1. Read `<work_dir>/META-INF/container.xml` with the `read` tool
 2. Find the `full-path` attribute in the `<rootfile>` element
 3. This gives you the path to `content.opf` relative to the work directory (e.g., `OEBPS/content.opf`)
-4. Read `content.opf` with the `view_file` tool
+4. Read `content.opf` with the `read` tool
 5. Store the content directory prefix (e.g., `OEBPS/`) — you'll need it for all subsequent file paths
 
 ### Step 5: Extract File Manifest
@@ -176,7 +176,7 @@ Configure each translation subagent call with:
   6. **QA Mode Notice** (if `--high-quality` is specified): "High Quality Mode is ENABLED. Chapters will undergo independent semantic QA review by the orchestrator after translation. Focus on translation fidelity, style profile adherence, and 100% tag preservation."
 
 ##### 6.1.1: Read the File
-- Use the `view_file` tool to read the XHTML file from the work directory
+- Use the `read` tool to read the XHTML file from the work directory
 - For files >2000 lines, use offset/limit to read in segments
 - Note the complete file structure: XML declaration, `<head>`, `<body>`
 - **Encoding check**: If the XML declaration specifies an encoding other than `utf-8` (e.g., `encoding="iso-8859-1"`), warn the user and proceed with caution
@@ -230,7 +230,7 @@ Reconstruct the complete XHTML file in memory, then write it in one shot:
 4. Keep `<head>` section entirely unchanged (title, CSS links, meta tags)
 5. Replace `<body>` content with the translated content (or bilingual interleaved content)
 6. Create the necessary subdirectories: `mkdir -p "<work_dir>/_translated/<subdirs>/"`
-7. **Write the entire file** to `<work_dir>/_translated/<relative_path>` using the **`write_to_file` tool** — this must be the complete file from XML declaration to closing `</html>` tag, in a single Write call
+7. **Write the entire file** to `<work_dir>/_translated/<relative_path>` using the **`write` tool** — this must be the complete file from XML declaration to closing `</html>` tag, in a single Write call
 8. Report: "Translated: <filename> (X/N)"
 
 Each subagent translates its assigned files **sequentially** within its own context (repeating Steps 6.1.1 through 6.1.4), maintaining batch-to-batch "previous context" continuity across files. Once all its assigned files are written, the translator subagent reports completion.
@@ -239,7 +239,7 @@ Each subagent translates its assigned files **sequentially** within its own cont
 
 If `--high-quality` is specified, the Root Agent (Orchestrator) manages an independent QA review and self-correction loop for all translated chapters before final acceptance.
 
-> **Architecture Note**: OpenCode adopts a flat orchestrator pattern where subagents cannot invoke nested subagents. Having the Root Agent directly orchestrate both the Maker (`epub-translator`) and Checker (`epub-qa-reviewer`) guarantees 100% compatibility across both OpenCode and Antigravity environments while maintaining clean separation of concerns.
+> **Architecture Note**: OpenCode adopts a flat orchestrator pattern where subagents cannot invoke nested subagents. Having the Root Agent directly orchestrate both the Maker (`epub-translator`) and Checker (`epub-qa-reviewer`) maintains clean separation of concerns and seamless orchestration.
 
 ###### Phase A: Parallel QA Dispatch
 1. Collect all chapters translated in the current round.

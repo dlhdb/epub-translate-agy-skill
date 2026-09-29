@@ -19,7 +19,7 @@
 為解決此問題，本系統實作了**硬碟暫存通訊機制**：
 1. **Orchestrator (Main Agent)**：負責派發任務與最終數據統計。它只傳遞檔案「路徑」給 Subagent，而非檔案「內容」。
 2. **Judge (Subagent)**：負責讀取原文、V1 與 V2，並在自己的獨立 Context 中進行深度交叉比對。
-3. **JSON 落地機制**：Subagent 評估完成後，**禁止**直接回報文字。它們被強制要求將結果格式化為嚴格的 JSON，並使用 `write_to_file` 寫入 `_evaluation_work/` 目錄中。
+3. **JSON 落地機制**：Subagent 評估完成後，**禁止**直接回報文字。它們被強制要求將結果格式化為嚴格的 JSON，並使用 `write` 寫入 `_evaluation_work/` 目錄中。
 4. **Data Aggregation**：Main Agent 最終只需讀取這些精簡的 JSON 檔案，即可輕鬆計算平均分並抓取證據，產出完美的 Markdown 報告。
 
 ## 3. 避免幻覺：Rubric 與 Chain of Thought

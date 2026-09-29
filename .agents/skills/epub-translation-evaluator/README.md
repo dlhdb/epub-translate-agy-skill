@@ -1,6 +1,6 @@
-# ePub Translation Evaluator (Antigravity Skill)
+# ePub Translation Evaluator (OpenCode Skill)
 
-這是一個專為 Antigravity 環境打造的電子書翻譯品質驗證技能（Workspace Skill）。本技能透過多代理（Multi-Agent）架構與 Python 腳本，能夠自動比對舊版 (V1) 與新版 (V2) 翻譯的差異，並根據客觀標準產出評估報告。
+這是一個專為 OpenCode 環境打造的電子書翻譯品質驗證技能。本技能透過多代理（Multi-Agent）架構與 Python 腳本，能夠自動比對舊版 (V1) 與新版 (V2) 翻譯的差異，並根據客觀標準產出評估報告。
 
 ---
 
@@ -36,7 +36,7 @@ eval_workspace/
 
 1. **混合式驗證 (Hybrid Validation)**：
    - **結構快篩**：利用內建的 Python 腳本 (`html_validator.py`) 快速掃描 V1 與 V2 的檔案，抓出遺失閉合標籤等嚴重的 HTML 結構損毀，不浪費 LLM 算力。
-   - **語意深度評估**：透過 Antigravity 的 `invoke_subagent` 呼叫多個子代理，進行原文與譯文的交叉比對。
+   - **語意深度評估**：透過 OpenCode 的 `subagent` 呼叫子代理人，進行原文與譯文的交叉比對。
 
 2. **客觀評估標準 (Evaluation Rubric)**：
    子代理會嚴格遵循 `references/evaluation-rubric.md` 中定義的 1-5 分標準進行評分，避免 LLM 出現盲目給高分或幻覺。

@@ -1,6 +1,6 @@
 # Awesome ePub Translator: 技術實作解析
 
-這份文件深入解析 `awesome-epub-translator` 技能在 Antigravity 框架下的技術實作細節。這個技能展示了如何利用大語言模型 (LLM) 結合多代理 (Multi-Agent) 架構，完成複雜的檔案處理與長文本翻譯任務。
+這份文件深入解析 `awesome-epub-translator` 技能在 OpenCode 多代理人架構下的技術實作細節。這個技能展示了如何利用大語言模型 (LLM) 結合多代理 (Multi-Agent) 架構，完成複雜的檔案處理與長文本翻譯任務。
 
 ## 1. 系統架構與設計哲學
 
@@ -14,7 +14,7 @@
 * **行內標籤的語序重組**：不同語言的文法語序不同。例如 `<p>This is a <em>very important</em> concept in <strong>Python</strong>.</p>` 翻譯成中文時，由於語序改變，標籤的位置必須對應移動。傳統程式無法判斷 `<em>` 該套在中文的哪個詞彙上。而 Agent 能在翻譯時，自然地將 HTML 標籤精準地重組並包覆在目標語言正確的詞彙上，保留最完美的排版。
 
 ### 系統架構圖 (Architecture)
-此架構展示了主代理（Orchestrator）、子代理群與檔案系統之間的星狀拓樸關係（Star / Hub-and-Spoke Pattern）。此設計同時完全相容 **OpenCode**（扁平調度無巢狀子代理）與 **Antigravity**。
+此架構展示了主代理（Orchestrator）、子代理群與檔案系統之間的星狀拓樸關係（Star / Hub-and-Spoke Pattern）。此設計採用 OpenCode 扁平調度模式，由主代理人直接掌控調度與審查。
 
 ```mermaid
 graph TD
@@ -119,12 +119,12 @@ sequenceDiagram
    - 主 Agent 會利用貪婪演算法，動態計算並將檔案公平地分發給最多 3 個 Subagents。
    - 關於此分配演算法（容量限制、排序與貪婪分發機制）的詳細實作，請參閱獨立文件：[BIN_PACKING_STRATEGY.md](BIN_PACKING_STRATEGY.md)
 2. **Invoke Subagent**：
-   - 主 Agent 透過 `invoke_subagent` 工具同時啟動這些子代理。
+   - 主 Agent 透過 `subagent` 工具同時啟動這些子代理。
    - 傳遞給子代理的 Prompt 包含了：`style_profile.md` (風格)、`translation-prompt.md` (翻譯規則)、以及分配到的檔案清單。
 
 ### C. 子代理的翻譯策略 (Script-Assisted Translation)
 Subagent 在翻譯具體檔案時，改為使用**腳本輔助 (Script-Assisted) 策略**，以解決大型檔案上下文遺漏與標籤損毀的問題：
-1. **禁用 Replace 工具**：明確禁止使用 `replace_file_content`（尋找與取代），因為在大型 HTML 檔案中找獨特字串很容易失敗且消耗大量 Context。
+1. **禁用部分取代工具**：明確禁止使用 `edit`（尋找與取代），因為在大型 HTML 檔案中找獨特字串很容易失敗且消耗大量 Context。
 2. **提取文本 (Extract)**：
    - 使用 `epub_translator_utils.py extract` 讀取 XHTML，將所有區塊級標籤（如 `<p>`, `<h1>`）的內容與字元偏移量提取至 JSON 字典檔。
 3. **字典翻譯與保留標籤 (Dictionary Translation & Inline Tag Preservation)**：
@@ -134,10 +134,9 @@ Subagent 在翻譯具體檔案時，改為使用**腳本輔助 (Script-Assisted)
    - 翻譯完成後，使用 `epub_translator_utils.py inject` 將翻譯好的字典由後往前精準替換回原始 XHTML 中，一次性輸出到 `_translated/` 目錄，確保 100% 的結構一致性。
 
 ### D. 高質量 QA 模式 (Maker-Checker Architecture)
-為了追求極致的翻譯品質與跨平台相容性，系統提供了 `--high-quality` 參數，啟用主協調者統一調度的星狀 Maker-Checker 架構：
-1. **星狀協調與雙環境相容 (Star / Hub-and-Spoke Pattern)**：
-   - **OpenCode** 採用嚴格的扁平調度模式，子代理人環境不具備遞迴產生下一層子代理人的 `subagent` 工具；而 **Antigravity (AGY)** 原生支援巢狀代理人委派。
-   - 為了達成 100% 雙平台相容，將 QA 調度職責提升至 **主 Agent（Root Orchestrator）** 統一掌控，子代理人各司其職，不再依賴巢狀生成。
+為了追求極致的翻譯品質，系統提供了 `--high-quality` 參數，啟用主協調者統一調度的星狀 Maker-Checker 架構：
+1. **星狀協調模式 (Star / Hub-and-Spoke Pattern)**：
+   - 採用 OpenCode 扁平調度模式，由 **主 Agent（Root Orchestrator）** 統一掌控派發與審查，子代理人各司其職，維持職責分離與乾淨上下文。
 2. **深度語意審查 (Deep Semantic Review)**：
    - 各章節翻譯初稿寫入 `_translated/` 後，主 Agent 主動以並行方式（最多 3 個）喚醒 `epub-qa-reviewer` 子代理人。
    - QA 對照 `style_profile.md` 與原文，進行語氣、漏翻、行內標籤包覆與專業術語等深度審查，產出結構化評估報告與修改建議。
@@ -159,7 +158,7 @@ Subagent 在翻譯具體檔案時，改為使用**腳本輔助 (Script-Assisted)
 * **自動斷點續傳 (Checkpoint-based Resumability)**：
   透過將翻譯好的檔案獨立存放在 `_translated/` 目錄，如果任務因故中斷（如網路問題、使用者暫停），下次啟動時主 Agent 會檢查該目錄，直接跳過已存在的檔案。
 * **Zero External Dependencies**：
-  技能設計上不依賴任何外部的 Python 庫（如 BeautifulSoup 或 ePub 解析庫），純粹依靠 Antigravity 內建的檔案讀寫工具 (`view_file`, `write_to_file`) 與系統基礎指令 (`unzip`, `zip`, `python`)。這確保了技能在任何標準環境下的高相容性。
+  技能設計上不依賴任何外部的 Python 庫（如 BeautifulSoup 或 ePub 解析庫），純粹依靠 OpenCode 內建的檔案讀寫工具 (`read`, `write`) 與系統基礎指令 (`unzip`, `zip`, `python`)。這確保了技能在任何標準環境下的高相容性。
 * **Prompt Engineering**：
   將通用的邏輯寫在 `SKILL.md`，而將高度專業的翻譯提示抽離到 `references/translation-prompt.md`。透過 `{STYLE_PROFILE}` 等佔位符，在執行期動態組裝 Prompt。
 

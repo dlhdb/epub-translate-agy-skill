@@ -1,10 +1,9 @@
 # TODO / Future Enhancements
 
-- [x] **重構高品質模式（Maker-Checker QA）調度架構以相容 OpenCode 與 Antigravity**
+- [x] **重構高品質模式（Maker-Checker QA）調度架構以完全支援 OpenCode**
   - **背景與問題**：
-    - **Antigravity (AGY)** 支援巢狀階層式代理人委派（Hierarchical Delegation），允許 `epub-translator` 子代理人在執行階段直接呼叫 `epub-qa-reviewer` 子代理人進行多輪自我糾錯迴圈（Self-correction Loop）。
     - **OpenCode** 採用嚴格的扁平/星狀調度架構（Flat Orchestrator Pattern），Child Session 內不具備 `subagent` 工具，禁止子代理人遞迴生成下一層子代理人。
-    - 現行 `SKILL.md` 指示由 Translator 代理人自行呼叫 QA 代理人，導致在 OpenCode 環境中高品質模式（`--high-quality`）無法實際啟動獨立的 `epub-qa-reviewer`，退化為 Translator 內部自我檢查。
+    - 舊版 `SKILL.md` 指示由 Translator 代理人自行呼叫 QA 代理人，導致在 OpenCode 環境中高品質模式（`--high-quality`）無法實際啟動獨立的 `epub-qa-reviewer`，退化為 Translator 內部自我檢查。
   - **實施成果與架構調整 (Completed)**：
     1. **修改 `SKILL.md` 調度職責（星狀架構）**：將 QA Reviewer 的調度權責全數移交給 Root Agent（主協調者）。
     2. **實作星狀 Maker-Checker 與自我糾錯閉環**：
