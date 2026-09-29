@@ -130,14 +130,18 @@ Translation uses up to 3 parallel subagents, each handling a subset of files. Th
 
 #### 6.0: Prepare File Assignments
 
-1. Collect all untranslated XHTML files — those in spine order whose checkpoint (`<work_dir>/_translated/<relative_path>`) does NOT yet exist. Print "Skipping (already translated): <filename>" for each skipped file.
+1. Collect all untranslated XHTML files — those in spine order whose checkpoint (`<work_dir>/_translated/<relative_path>`) does NOT yet exist:
+   - **In High Quality Mode (`--high-quality`)**: Also inspect `<work_dir>/_translated/.qa_status.json` (if present). A file is considered completely done ONLY if the checkpoint file exists AND its status in `.qa_status.json` is `APPROVED` or `APPROVED_WITH_WARNING`. If a file exists on disk but is unlisted or marked `NEEDS_REVISION` / `DRAFT`, it must be queued for QA review or revision.
+   - Print "Skipping (already translated): <filename>" for each verified complete file.
 2. If **0 files** remain: skip to Step 7.
 3. **Measure file sizes**: Run `wc -c` (or `ls -la`) on each remaining file. Classify:
    - **Small**: <30 KB
    - **Medium**: 30–80 KB
    - **Large**: >80 KB
    Report a size summary table to the user (e.g., "3 small, 5 medium, 2 large files").
-4. If **1 file** remains: translate it directly in the main agent (use the translation instructions in 6.1.1 below). No subagent overhead needed.
+4. If **1 file** remains:
+   - Translate it directly in the main agent (use the translation instructions in 6.1.1–6.1.4 below). No subagent overhead needed for translation.
+   - If `--high-quality` is enabled, proceed immediately to Phase 2 (QA Review) in Step 6.1.5 below for this file before marking it complete.
 5. If **2+ files** remain: assign files to up to 3 agents using **size-aware bin packing** instead of naive round-robin. Each agent has a budget:
    - **Max 3 files** per agent (hard cap — large files are expensive to translate and consume substantial context)
    - **Max ~200 KB total** per agent (sum of assigned file sizes)
@@ -169,7 +173,7 @@ Configure each translation subagent call with:
   3. **Output mode**: `pure` or `bilingual`
   4. **Assigned files**: List of relative paths (e.g., `OEBPS/Text/chapter_01.xhtml`, size, spine index)
   5. **Style profile path**: `<work_dir>/_translated/style_profile.md` (the subagent will read this directly)
-  6. **QA Mode Directive** (if `--high-quality` is specified): "High Quality Mode is ENABLED. Each translated chapter must be verified via the `epub-qa-reviewer` subagent before completion."
+  6. **QA Mode Notice** (if `--high-quality` is specified): "High Quality Mode is ENABLED. Chapters will undergo independent semantic QA review by the orchestrator after translation. Focus on translation fidelity, style profile adherence, and 100% tag preservation."
 
 ##### 6.1.1: Read the File
 - Use the `view_file` tool to read the XHTML file from the work directory
@@ -229,24 +233,83 @@ Reconstruct the complete XHTML file in memory, then write it in one shot:
 7. **Write the entire file** to `<work_dir>/_translated/<relative_path>` using the **`write_to_file` tool** — this must be the complete file from XML declaration to closing `</html>` tag, in a single Write call
 8. Report: "Translated: <filename> (X/N)"
 
-##### 6.1.5: QA Review (If High Quality Mode is enabled)
+Each subagent translates its assigned files **sequentially** within its own context (repeating Steps 6.1.1 through 6.1.4), maintaining batch-to-batch "previous context" continuity across files. Once all its assigned files are written, the translator subagent reports completion.
 
-If `--high-quality` is specified, the translation undergoes a Maker-Checker review before final checkpoint approval:
-1. Dispatch the pre-defined QA Subagent: `agent: "epub-qa-reviewer"` (omit `model` so it automatically uses its pre-configured `google/gemini-flash-latest`, or use `<qa_model>` if explicitly specified).
-2. Provide the QA Subagent with the source file path (`<work_dir>/<relative_path>`), the newly translated file path (`<work_dir>/_translated/<relative_path>`), and the style profile path (`<work_dir>/_translated/style_profile.md`).
-3. The QA Subagent conducts a **Deep Semantic Review**:
+##### 6.1.5: Maker-Checker QA Review & Self-Correction (High Quality Mode Only)
+
+If `--high-quality` is specified, the Root Agent (Orchestrator) manages an independent QA review and self-correction loop for all translated chapters before final acceptance.
+
+> **Architecture Note**: OpenCode adopts a flat orchestrator pattern where subagents cannot invoke nested subagents. Having the Root Agent directly orchestrate both the Maker (`epub-translator`) and Checker (`epub-qa-reviewer`) guarantees 100% compatibility across both OpenCode and Antigravity environments while maintaining clean separation of concerns.
+
+###### Phase A: Parallel QA Dispatch
+1. Collect all chapters translated in the current round.
+2. Ensure `<work_dir>/_translated/qa_reports/` directory exists (`mkdir -p "<work_dir>/_translated/qa_reports/"`).
+3. Dispatch `epub-qa-reviewer` subagents (up to 3 in parallel) for the translated chapters:
+   - **agent**: `epub-qa-reviewer`
+   - **description**: `QA Review: <filename>`
+   - **model**: `<qa_model>` (optional, pass only if explicitly specified by user with `--qa-model`)
+   - **background**: `true` (or run concurrently)
+   - **prompt**: A structured QA task payload containing:
+     1. **Work directory**: `<work_dir>`
+     2. **Source file path**: `<work_dir>/<relative_path>`
+     3. **Translated draft path**: `<work_dir>/_translated/<relative_path>`
+     4. **Style profile path**: `<work_dir>/_translated/style_profile.md`
+     5. **Target language** and **Output mode** (`pure` or `bilingual`)
+4. The QA Subagent conducts a **Deep Semantic Review**:
    - Compares source vs. translated text against `style_profile.md`.
    - Checks for missing translations, awkward phrasing, or stiff literal translations.
-   - Verifies structural integrity (tags are properly closed, no truncation, code blocks untouched).
-4. Wait for the QA Subagent's structured report and rubric score.
-5. **Self-Correction Loop**: If the QA Subagent reports `NEEDS_REVISION`, the Translator reads the actionable feedback, revises the translation in memory, rewrites the file in one shot using `write`, and requests re-review.
-6. Once the QA Subagent marks `APPROVED` (or rubric score >= 4), proceed to the next assigned file or report success.
+   - Verifies structural integrity (tags properly closed, no truncation, code blocks untouched).
+5. The QA Subagent returns a structured Markdown report:
+   ```markdown
+   ### QA Review Report: [filename]
+   - **Verdict**: [APPROVED | NEEDS_REVISION]
+   - **Rubric Score**: [1-5]/5
+   - **Summary**: ...
+   #### Key Findings & Evidence
+   ...
+   #### Revision Instructions (Required if NEEDS_REVISION)
+   ...
+   ```
+6. The Root Agent saves each QA report to `<work_dir>/_translated/qa_reports/<sanitized_relative_path>.md` using `write`.
 
-Each subagent translates its assigned files **sequentially** within its own context, maintaining batch-to-batch "previous context" continuity across files. Steps 6.1.1 through 6.1.5 are repeated for each assigned file.
+###### Phase B: Self-Correction Revision Loop
+For each chapter reviewed:
+
+- **If Verdict is `APPROVED` (or Rubric Score >= 4)**:
+  - Update `<work_dir>/_translated/.qa_status.json`:
+    ```json
+    {
+      "<relative_path>": {
+        "status": "APPROVED",
+        "score": 5,
+        "revisions": 0
+      }
+    }
+    ```
+  - Report: "QA Approved: <filename> (Score: X/5)"
+
+- **If Verdict is `NEEDS_REVISION` (Rubric Score < 4)**:
+  - Check previous revision attempts from `.qa_status.json` (defaults to 0):
+    - **If revision count < 2 (up to 2 revision attempts allowed)**:
+      - Increment revision count in `.qa_status.json` with status `"NEEDS_REVISION"`.
+      - Dispatch `agent: "epub-translator"` with a **Self-Contained Revision Payload**:
+        - **Work directory**: `<work_dir>`
+        - **Target file to revise**: `<work_dir>/_translated/<relative_path>`
+        - **Source reference**: `<work_dir>/<relative_path>`
+        - **Style profile**: `<work_dir>/_translated/style_profile.md`
+        - **Target language** and **Output mode**
+        - **QA Report & Revision Instructions**:
+          Inline the exact `Revision Instructions` and `Key Findings & Evidence` from the QA Reviewer.
+        - **Instruction**:
+          "You are revising an existing translation. Read the current translated draft and the source file. Address every item in the QA Revision Instructions, maintain valid XML/HTML structure and style profile consistency, and overwrite `<work_dir>/_translated/<relative_path>` completely in one shot using the write tool."
+      - After the translator finishes revising, re-dispatch `epub-qa-reviewer` for this file.
+    - **If revision count >= 2 (max retries reached)**:
+      - Terminate the loop gracefully: mark status as `"APPROVED_WITH_WARNING"` in `.qa_status.json`.
+      - Report warning: "QA Warning: <filename> reached max revision limit (2). Retaining current draft with score X/5 to avoid infinite loop."
 
 #### 6.2: Collect and Verify Results
 
-After all subagents complete:
+After all subagents and QA reviews complete:
 
 1. **Check checkpoint existence**: `ls <work_dir>/_translated/<relative_path>` for each assigned file. If missing, mark as failed.
 
@@ -260,6 +323,7 @@ After all subagents complete:
 
 3. Report results:
    - "Translated X/N chapters (using K parallel subagents)."
+   - If High Quality mode is active: report QA summary table (filename, verdict, score, revision attempts).
    - If any files were incomplete: "Y files had incomplete translations and will be retried."
 
 **Session management:** If more files remain after this round (including retries from incomplete translations):
@@ -338,7 +402,8 @@ done
 # Copy all translated files over the staging copy, preserving directory structure
 cp -r "<work_dir>/_translated/"* "$staging_dir/" 2>/dev/null
 # Remove non-ePub artifacts that may have been in _translated/
-rm -f "$staging_dir/style_profile.md"
+rm -f "$staging_dir/style_profile.md" "$staging_dir/.qa_status.json"
+rm -rf "$staging_dir/qa_reports"
 ```
 
 #### 9.3.1: Verify Staging Directory Cleanliness
@@ -346,7 +411,7 @@ rm -f "$staging_dir/style_profile.md"
 Before packaging, verify no artifacts leaked into staging:
 ```bash
 # Check for common artifacts that should NOT be in the ePub
-find "$staging_dir" -name "*.py" -o -name "*.txt" -o -name "*.md" -o -name "*.log" \
+find "$staging_dir" -name "*.py" -o -name "*.txt" -o -name "*.md" -o -name "*.log" -o -name "*.json" \
   -o -name "_*" -type d | head -20
 ```
 If any unexpected files are found, remove them before proceeding.

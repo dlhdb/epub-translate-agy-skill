@@ -14,75 +14,90 @@
 * **行內標籤的語序重組**：不同語言的文法語序不同。例如 `<p>This is a <em>very important</em> concept in <strong>Python</strong>.</p>` 翻譯成中文時，由於語序改變，標籤的位置必須對應移動。傳統程式無法判斷 `<em>` 該套在中文的哪個詞彙上。而 Agent 能在翻譯時，自然地將 HTML 標籤精準地重組並包覆在目標語言正確的詞彙上，保留最完美的排版。
 
 ### 系統架構圖 (Architecture)
-此架構展示了主代理、子代理與檔案系統之間的拓樸關係與職責劃分。
+此架構展示了主代理（Orchestrator）、子代理群與檔案系統之間的星狀拓樸關係（Star / Hub-and-Spoke Pattern）。此設計同時完全相容 **OpenCode**（扁平調度無巢狀子代理）與 **Antigravity**。
 
 ```mermaid
 graph TD
-    User([使用者]) -->|"啟動指令"| MainAgent["主 Agent（協調者）"]
+    User([使用者]) -->|"啟動指令"| MainAgent["主 Agent（星狀協調者）"]
     
     subgraph FileSystem [檔案系統]
         FS[("工作目錄<br/>_translation_work/")]
         SkillDoc["SKILL.md & Prompt"]
+        QAReport[("QA 報告與狀態<br/>qa_reports/ & .qa_status.json")]
     end
     
     MainAgent -.->|"讀取指令與規則"| SkillDoc
     MainAgent <-->|"解壓縮 / 驗收 / 打包"| FS
+    MainAgent <-->|"管理狀態與儲存報告"| QAReport
     
-    subgraph Subagents [翻譯執行群]
+    subgraph Subagents [執行子代理群]
         Sub1["Translator Subagent 1"]
         Sub2["Translator Subagent 2"]
-        QA["QA Subagent<br/>(High Quality 模式)"]
+        QA["QA Subagent<br/>(epub-qa-reviewer)"]
     end
     
-    MainAgent -->|"分發任務"| Sub1
-    MainAgent -->|"分發任務"| Sub2
-    
+    MainAgent -->|"Phase 1: 派發翻譯任務"| Sub1
+    MainAgent -->|"Phase 1: 派發翻譯任務"| Sub2
     Sub1 <-->|"讀取原文 / 寫入譯文"| FS
     Sub2 <-->|"讀取原文 / 寫入譯文"| FS
     
-    Sub1 <-->|"送交審查與接收建議"| QA
-    Sub2 <-->|"送交審查與接收建議"| QA
+    MainAgent -->|"Phase 2: 派發語意審查"| QA
+    QA -.->|"讀取原文 / 譯文 / 風格畫像"| FS
+    QA -->>|"回傳 Verdict & 修改建議"| MainAgent
+    
+    MainAgent -.->|"Phase 3: 派發修訂任務 (若需修正)"| Sub1
 ```
 
 ### 執行流程圖 (Sequence)
-此流程展示了從解壓縮、分批翻譯、驗收防呆到最終打包的時序互動。
+此流程展示了從解壓縮、分批翻譯、主協調者星狀 Maker-Checker 驗收糾錯到最終打包的時序互動。
 
 ```mermaid
 sequenceDiagram
     participant U as 使用者
-    participant M as 主 Agent
+    participant M as 主 Agent (Orchestrator)
     participant F as 檔案系統
-    participant S as 翻譯子代理
-    participant Q as QA Subagent
+    participant S as 翻譯子代理 (Maker)
+    participant Q as QA Subagent (Checker)
     
     U->>M: 要求翻譯 ePub
     M->>F: 1. 解壓縮
     M->>F: 2. 解析 XML (列出全書清單)
     M->>F: 3. 擷取風格畫像
     
-    loop 每一回合
-        M->>F: 4. 掃描目錄 (跳過已翻譯的檔案)
+    loop 每一回合 (Round)
+        M->>F: 4. 掃描目錄與 .qa_status.json (跳過已完成審查的檔案)
         M->>M: 5. 依大小組裝任務 (Bin Packing)
-        M->>S: 6. 喚醒代理並注入 Prompt 與任務
-        S->>F: 7. 腳本輔助提取與翻譯，重新注入後寫出
+        M->>S: 6. 派發翻譯子代理並注入 Prompt (Phase 1: Maker)
+        S->>F: 7. 提取原文、翻譯並注入寫出至 _translated/
+        S-->>M: 8. 回報翻譯初稿完成
         
-        opt High Quality 模式
-            S->>Q: 7.1 喚醒 QA 要求審查
-            Q->>F: 7.2 讀取原文、譯文與風格畫像
-            Q-->>S: 7.3 回報語意問題與修改建議
-            S->>F: 7.4 針對 JSON 字典修正並重新注入寫出
-            Note over S, Q: 重複審查直到 QA 通過
+        opt High Quality 模式 (Phase 2 & 3: Checker & Self-Correction)
+            M->>Q: 9. 主代理主動喚醒 QA 審查 (Checker)
+            Q->>F: 讀取原文、譯文初稿與風格畫像
+            Q-->>M: 回傳 QA 報告 (APPROVED 或 NEEDS_REVISION)
+            M->>F: 儲存 QA 報告至 qa_reports/
+            
+            loop 糾錯修訂迴圈 (最多 2 次)
+                alt 審查判定 NEEDS_REVISION 且未達上限
+                    M->>S: 派發自包含修訂任務 (帶入具體 QA 建議)
+                    S->>F: 針對問題修訂並覆寫 _translated/
+                    S-->>M: 回報修訂完成
+                    M->>Q: 重新派發 QA 複查
+                    Q-->>M: 回傳複查結果
+                else 判定 APPROVED 或達上限 (APPROVED_WITH_WARNING)
+                    M->>F: 更新 .qa_status.json
+                end
+            end
         end
         
-        F-->>M: 8. 讀取最新狀態
-        M->>M: 9. 驗收 (檢查是否截斷或漏翻)
-        alt 驗收失敗
-            M->>F: 刪除檔案 (下回合掃描時將自動重試)
+        F-->>M: 10. 讀取最新狀態與完整性驗收
+        alt 嚴重損毀或截斷
+            M->>F: 刪除檔案 (下回合自動重試)
         end
     end
     
-    M->>F: 10. 重新打包
-    M->>U: 輸出並回報完成
+    M->>F: 11. 重新打包 (自動排除 qa_reports/ 與暫存檔)
+    M->>U: 輸出並回報完成 (含 QA 平均評分與修訂統計)
 ```
 
 ## 2. 核心工作流程 (Workflow)
@@ -119,10 +134,19 @@ Subagent 在翻譯具體檔案時，改為使用**腳本輔助 (Script-Assisted)
    - 翻譯完成後，使用 `epub_translator_utils.py inject` 將翻譯好的字典由後往前精準替換回原始 XHTML 中，一次性輸出到 `_translated/` 目錄，確保 100% 的結構一致性。
 
 ### D. 高質量 QA 模式 (Maker-Checker Architecture)
-為了追求極致的翻譯品質，系統提供了 `--high-quality` 參數來啟用 Maker-Checker 架構：
-1. **動態賦權**：當開啟此模式時，主 Agent 會透過 `define_subagent` 賦予翻譯子代理 (Translator) 呼叫其他子代理的權限。
-2. **深度語意審查 (Deep Semantic Review)**：Translator 在寫入譯文後，會喚醒一個專屬的 `QA Subagent (epub-qa-reviewer)`。QA 會對照 `style_profile.md` 與原文，進行語氣、漏翻、雙關語等深度審查，而非僅僅是結構防呆。
-3. **自我修正迴圈 (Self-Correction Loop)**：建立 `Translator -> QA Reviewer` 的內部工作流。如果 QA 發現問題，會直接提供修改建議，Translator 會在記憶體中修正並重新寫入，直到 QA 審查通過才會向主 Agent 回報進度。這使得主 Agent 的 Context 不會被大量的驗收細節污染，貫徹了職責分離 (Separation of Concerns)。
+為了追求極致的翻譯品質與跨平台相容性，系統提供了 `--high-quality` 參數，啟用主協調者統一調度的星狀 Maker-Checker 架構：
+1. **星狀協調與雙環境相容 (Star / Hub-and-Spoke Pattern)**：
+   - **OpenCode** 採用嚴格的扁平調度模式，子代理人環境不具備遞迴產生下一層子代理人的 `subagent` 工具；而 **Antigravity (AGY)** 原生支援巢狀代理人委派。
+   - 為了達成 100% 雙平台相容，將 QA 調度職責提升至 **主 Agent（Root Orchestrator）** 統一掌控，子代理人各司其職，不再依賴巢狀生成。
+2. **深度語意審查 (Deep Semantic Review)**：
+   - 各章節翻譯初稿寫入 `_translated/` 後，主 Agent 主動以並行方式（最多 3 個）喚醒 `epub-qa-reviewer` 子代理人。
+   - QA 對照 `style_profile.md` 與原文，進行語氣、漏翻、行內標籤包覆與專業術語等深度審查，產出結構化評估報告與修改建議。
+   - 主 Agent 將報告持久化儲存於 `_translated/qa_reports/<filename>.md`。
+3. **自我修正迴圈與終止防護 (Self-Correction Loop & Circuit Breaker)**：
+   - 若 QA 審查判定為 `NEEDS_REVISION`（分數 < 4），主 Agent 派發自包含（Self-contained）的修訂任務至 `epub-translator`，將具體錯誤定位與修改方針帶入，由翻譯者針對性覆寫草稿。
+   - 修訂後主 Agent 再次調用 QA 進行複查。
+   - **終止防護**：設定最多修訂 2 次。若達上限仍未獲 Approved，標記為 `APPROVED_WITH_WARNING` 並記錄警告，避免無窮迴圈與 Token 耗盡。
+   - 狀態由 `_translated/.qa_status.json` 精確管理，確保中斷時斷點續傳的可靠性。
 
 ### E. 後置處理與打包
 1. **翻譯目錄與 Metadata**：主 Agent 接手翻譯 `toc.ncx` / `toc.xhtml`，並更新 `content.opf` 中的 `<dc:language>` 與標題。
