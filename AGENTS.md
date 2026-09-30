@@ -44,12 +44,13 @@ The translation workflow is triggered when users ask the agent to translate an e
 - **Style Profile System**: Before translating the whole book, the agent reads early chapters to analyze the book's genre, tone, and voice, saving a profile to `style_profile.md`. This profile is passed to subagents to ensure consistent tone across all translated chapters.
 - **Checkpoint-based Resumability**: Translated chapters are saved in a temporary directory. If the agent hits a context limit, network error, or simply pauses, re-running the skill will skip already-translated and approved XHTML files.
 - **Bilingual Mode**: An optional mode where the agent interleaves the original text and the translated text with specific CSS classes, ideal for language learners.
-- **Two-Pass In-Memory Self-Reflection & QA**: In `--high-quality` mode, `epub-translator` subagents execute a two-pass in-memory editorial review prior to saving: Pass 1 generates the translation draft, and Pass 2 rigorously inspects and corrects XML attribute syntax, tag hierarchy, completeness, and style profile adherence. This eliminates external orchestrator ping-pong and guarantees high quality upon write.
+- **Two-Pass In-Memory Self-Reflection & QA**: In `--high-quality` mode, `epub-translator` subagents execute a two-pass in-memory editorial review prior to saving: Pass 1 generates the translation draft, and Pass 2 rigorously inspects and corrects XML attribute syntax, tag hierarchy, completeness, and style profile adherence.
+- **Deterministic Mechanical Format Validation & Targeted LLM Repair**: Structural integrity (XML well-formedness, tag closures, attribute duplicates, heading hierarchy) is validated mechanically via `format_linter.py` (0 tokens, millisecond execution). Semantic judgments remain with the LLM. If format errors are detected, the LLM performs targeted in-place repairs (up to 2 attempts with circuit breaker), avoiding expensive full-chapter restarts.
 
 ## Work Directory & Debugging
 
 When a translation is in progress, a temporary `<filename>_translation_work/` directory is created alongside the source ePub. This is crucial for debugging if a translation fails:
-- `_translated/`: Contains the generated `style_profile.md`, `.qa_status.json`, QA reports (`qa_reports/`), and all successfully translated chapters. Check this folder to verify if translated XHTML files have valid, closed tags.
+- `_translated/`: Contains the generated `style_profile.md` and all successfully translated chapters. Check this folder to verify if translated XHTML files have valid, closed tags.
 - `_staging/`: Used during the repackaging phase before the final zip is created.
 Agents should always investigate this work directory if an ePub fails to repackage or render correctly.
 

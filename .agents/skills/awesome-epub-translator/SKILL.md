@@ -168,10 +168,11 @@ Configure each translation subagent call with:
   3. **Output mode**: `pure` or `bilingual`
   4. **Assigned files**: List of relative paths (e.g., `OEBPS/Text/chapter_01.xhtml`, size, spine index)
   5. **Style profile path**: `<work_dir>/_translated/style_profile.md` (the subagent will read this directly)
-  6. **QA Mode Notice** (if `--high-quality` is specified): "High Quality Mode (Two-Pass Self-Reflection) is ENABLED. You MUST execute Directive 5 (Two-Pass Self-Reflection & Quality Verification Protocol) in memory before calling write:
+  6. **QA Mode Notice** (if `--high-quality` is specified): "High Quality Mode (Two-Pass Self-Reflection & Mechanical Validation) is ENABLED. You MUST execute Directives 5, 6, and 7:
      - Pass 1: Translate content in memory.
-     - Pass 2: Self-critique and fix in memory: merge attributes cleanly (`class=\"center translated\"`), preserve heading levels (`<h1>`/`<h2>` must not be demoted to `<p>`), ensure all container list items in navigation/TOC are translated, and enforce uniform pronouns and local terminology.
-     - Pass 3: Atomic write complete XHTML to `<work_dir>/_translated/<relative_path>`."
+     - Pass 2: Semantic editorial self-reflection (uniform pronouns, accurate tech terminology, fluency).
+     - Pass 3: Atomic write complete XHTML to `<work_dir>/_translated/<relative_path>`.
+     - Pass 4: Run `python3 .agents/skills/awesome-epub-translator/scripts/format_linter.py \"<work_dir>/_translated/<relative_path>\" --source \"<work_dir>/<relative_path>\" --json` via shell. If mechanical errors are reported, fix them immediately in place and overwrite (up to 2 self-repair cycles) before concluding."
 
 ##### 6.1.1: Read the File
 - Use the `read` tool to read the XHTML file from the work directory
@@ -234,54 +235,61 @@ Reconstruct the complete XHTML file in memory, then write it in one shot:
 
 Each subagent translates its assigned files **sequentially** within its own context (repeating Steps 6.1.1 through 6.1.4), maintaining batch-to-batch "previous context" continuity across files. Once all its assigned files are written, the translator subagent reports completion.
 
-##### 6.1.5: Two-Pass Self-Reflection & Editorial QA (High Quality Mode)
+##### 6.1.5: In-Subagent Mechanical Linter & Targeted Self-Repair (High Quality Mode)
 
-When `--high-quality` is specified, high translation fidelity and structural integrity are guaranteed through a **Two-Pass Self-Reflection Architecture**:
+When `--high-quality` is specified, high translation fidelity and structural integrity are guaranteed through an **In-Subagent Two-Pass + Mechanical Verification Architecture**:
 
 ```text
 [Input XHTML] ──> Pass 1: Translate in memory
                         │
                         ▼
-                  Pass 2: Editorial QA Self-Reflection & Self-Correction
-                          ├─ Merge attributes (e.g. class="center translated")
-                          ├─ Preserve heading hierarchy (h1/h2 cannot become p)
-                          ├─ Verify container TOC links and complete translation
-                          └─ Enforce consistent pronouns and local terminology
+                  Pass 2: Semantic Self-Reflection (Tone, Terminology, Fluency)
                         │
                         ▼
                   Pass 3: Atomic write to <work_dir>/_translated/<relative_path>
+                        │
+                        ▼
+                  Pass 4: Deterministic Mechanical Linter & Targeted Self-Repair
+                          ├─ Subagent runs format_linter.py via shell (0 token, 5ms)
+                          ├─ If PASSED ──> Final chapter validated
+                          └─ If FAILED ──> Subagent immediately fixes errors in place
+                                           and overwrites (max 2 repair cycles)
 ```
 
-1. **In-Memory Two-Pass Execution**:
-   Each `epub-translator` subagent autonomously carries out Pass 1 (draft translation) and Pass 2 (editorial self-critique against the 4 failure modes) in memory before invoking `write`. This guarantees that every file written to `<work_dir>/_translated/<relative_path>` is already pre-verified and structurally sound.
+1. **Closed-Loop Execution Inside Subagent**:
+   Each `epub-translator` subagent carries out drafting, semantic self-reflection, and mechanical linter verification entirely inside its own session. If mechanical format issues (such as XML attribute duplication, demoted headings, or tag mismatch) are detected by `format_linter.py`, the subagent repairs them immediately without external orchestrator ping-pong.
 
 2. **Zero Coordination Overhead**:
-   Because quality verification is encapsulated within each translator subagent:
-   - Root Orchestrator does not need to shuffle files across multiple pipeline directories.
-   - Background parallel execution (`background: true`) is completely race-condition-free.
-   - Resumability is simple: any file existing in `<work_dir>/_translated/<relative_path>` is valid and complete.
+   Because format verification and self-repair occur autonomously within each subagent:
+   - Root Orchestrator does not need to dispatch secondary revision agents.
+   - Background parallel execution (`background: true`) remains completely race-condition-free.
+   - Files arriving at `<work_dir>/_translated/<relative_path>` are pre-verified and validated.
 
-3. **Guaranteed Quality at Write Time**:
-   Because quality verification and structural correction happen in-memory before the file is ever written, every chapter written to `_translated/` is immediately production-ready without requiring secondary external ping-pong review loops.
+3. **Circuit Breaker Protection**:
+   Each subagent is limited to 2 self-repair cycles per chapter. If a persistent syntax issue cannot be resolved mechanically, the subagent reports a warning rather than looping endlessly.
 
 #### 6.2: Collect and Verify Results
 
-After all subagents and QA reviews complete:
+After all subagents complete their assigned files:
 
-1. **Check checkpoint existence**: `ls <work_dir>/_translated/<relative_path>` for each assigned file. If missing, mark as failed.
+1. **Check checkpoint existence**: Verify that `<work_dir>/_translated/<relative_path>` exists for each assigned file. If missing, mark as failed.
 
-2. **Verify translation completeness** for each checkpoint that exists:
-   - Read the first ~200 lines and last ~100 lines of the translated file
-   - Check for signs of incomplete translation:
-     - Large blocks of source-language text remaining in `<p>` elements (a few untranslated proper nouns or code terms are fine — look for entire paragraphs still in the source language)
-     - File is significantly smaller than the original (may indicate truncation)
-     - File ends abruptly without closing `</html>` tag
-   - If a file appears incompletely translated, **delete the checkpoint** (`rm`) so it will be retried in the next round. Report: "Incomplete translation detected: <filename> — will retry in next round."
+2. **Orchestrator Quick Sanity Audit**:
+   Subagents have already run `format_linter.py` and repaired errors internally. The Root Orchestrator performs a fast audit across completed files:
+   ```bash
+   python3 .agents/skills/awesome-epub-translator/scripts/format_linter.py "<work_dir>/_translated/<relative_path>" --source "<work_dir>/<relative_path>" --json
+   ```
+   - **If status is `PASSED`**: Chapter confirmed.
+   - **If status is `FAILED`**: Report any warnings recorded by subagents during circuit breaker cutoff.
 
-3. Report results:
+3. **Semantic Sanity Spot-Check (LLM / Visual Review)**:
+   - Verify that paragraphs are translated and not left entirely in the source language.
+   - If any files were completely missed or skipped, retry them in the next round.
+
+4. Report results:
    - "Translated X/N chapters (using K parallel subagents)."
-   - If High Quality mode is active: report Two-Pass self-reflection verification status.
-   - If any files were incomplete: "Y files had incomplete translations and will be retried."
+   - "Format validation: All chapters passed in-subagent mechanical verification."
+   - If any warnings occurred: "Y chapters completed with format warnings."
 
 **Session management:** If more files remain after this round (including retries from incomplete translations):
 

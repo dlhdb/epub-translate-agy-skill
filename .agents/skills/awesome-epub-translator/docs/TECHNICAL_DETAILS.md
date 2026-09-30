@@ -48,6 +48,7 @@ sequenceDiagram
     participant M as 主 Agent (Orchestrator)
     participant F as 檔案系統
     participant S as 翻譯子代理 (epub-translator)
+    participant L as 格式檢查器 (format_linter)
     
     U->>M: 要求翻譯 ePub
     M->>F: 1. 解壓縮
@@ -57,14 +58,22 @@ sequenceDiagram
     loop 每一回合 (Round)
         M->>F: 4. 掃描目錄 (跳過已翻譯檔案)
         M->>M: 5. 依大小組裝任務 (Bin Packing)
-        M->>S: 6. 派發翻譯子代理並注入 Prompt (含 Two-Pass 自檢指令)
-        Note over S: Pass 1: 初步翻譯<br/>Pass 2: 記憶體 QA 自我批判與修復
-        S->>F: 7. 單次原子寫入至 _translated/
-        S-->>M: 8. 回報翻譯完成 (自檢通過)
-        M->>F: 9. 完整性驗收 (檢查標籤閉合與無截斷)
+        M->>S: 6. 派發翻譯子代理 (含自審與 Linter 指令)
+        Note over S: Pass 1: 初步翻譯<br/>Pass 2: 記憶體語意自省
+        S->>F: 7. 原子寫出草稿至 _translated/
+        loop 子代理自主格式檢驗與修復 (最多 2 次)
+            S->>L: 8. 呼叫 shell 執行 format_linter.py
+            L-->>S: 回傳格式診斷 (PASS / FAIL)
+            opt 格式未通過
+                Note over S: 依報錯針對性修復
+                S->>F: 覆寫修正後的 XHTML
+            end
+        end
+        S-->>M: 9. 回報章節完成 (自審與格式皆通過)
+        M->>F: 10. 快速驗收
     end
     
-    M->>F: 10. 重新打包 (自動排除暫存檔)
+    M->>F: 11. 重新打包 (自動排除暫存檔)
     M->>U: 輸出並回報完成
 ```
 
@@ -101,14 +110,19 @@ Subagent 在翻譯具體檔案時，改為使用**腳本輔助 (Script-Assisted)
 4. **注入與寫出 (Inject)**：
    - 翻譯完成後，使用 `epub_translator_utils.py inject` 將翻譯好的字典由後往前精準替換回原始 XHTML 中，一次性輸出到 `_translated/` 目錄，確保 100% 的結構一致性。
 
-### D. 高質量 QA 模式 (Two-Pass Self-Reflection in-Memory Architecture)
-為了追求極致的翻譯品質，系統提供了 `--high-quality` 參數，核心採用 **Two-Pass 記憶體自我批判架構**：
+### D. 高質量 QA 模式 (Two-Pass Self-Reflection 與子代理自主機械格式驗收)
+為了追求極致的翻譯品質與結構穩定性，系統在架構上落實「**機械化負責格式檢查、語意統一由 LLM 判斷、修復統一由 LLM 執行**」的核心原則，並由子代理自身實現端到端的內部閉環：
 1. **內部雙階段自省 (Two-Pass In-Memory Self-Reflection)**：
-   - 翻譯子代理人 (`epub-translator`) 在調用 `write` 工具前，於記憶體中自主完成兩階段作業：
+   - 翻譯子代理人 (`epub-translator`) 在記憶體中自主完成兩階段作業：
      - **Pass 1 (初譯)**：依風格畫像完整產生目標語言譯文。
-     - **Pass 2 (挑剔編輯自審與修正)**：嚴格檢查 4 大關鍵失效模式：XML 屬性合法性（合併重複屬性如 `class="center translated"`）、標題階層保留（嚴禁 `h1`/`h2` 降級為 `p`）、目錄與容器節點完整性（父層目錄項必翻）、全篇人稱與台灣本地技術術語一致性。
-     - **原子化落盤**：修正完成後單次原子寫入 `_translated/`，確保落盤即為出版級成果。
-   - **優勢**：完全消除 Orchestrator 多目錄檔案搬移負擔與狀態競爭，背景並行（`background: true`）安全可靠，無需額外維護外部 QA 子代理。
+     - **Pass 2 (挑剔編輯自審)**：專注於語意流暢度、人稱（「你」與「您」一致性）、風格以及在地化技術術語。
+     - **原子寫出**：初步寫出完稿至 `_translated/`。
+2. **子代理自主調用機械格式檢查 (In-Subagent Mechanical Format Linter)**：
+   - 子代理寫入後，**立即自行透過 `shell` 工具呼叫** `format_linter.py`，進行毫秒級的客觀結構校驗：XML 閉合性、重複屬性（如 `class="center class="translated"`）、標題階層保留（防止 `<h1>` 降級為 `<p>`）與極端截斷。
+3. **內部即時修復與熔斷保護 (Immediate Self-Repair & Circuit Breaker)**：
+   - 若 `format_linter.py` 回報格式未通過，子代理**直接讀取精確錯誤報告並在同一 session 內針對性修復覆寫**，完全不需等待主 Orchestrator 介入或跨代理重派。
+   - 每章節最多自我修復 2 次；若 2 次後仍未通過則記錄警告熔斷，防止無限重試與 Token 耗盡。
+   - 主 Orchestrator 接收到的章節即為已完成自審與格式驗證的出版級成品。
 
 ### E. 後置處理與打包
 1. **翻譯目錄與 Metadata**：主 Agent 接手翻譯 `toc.ncx` / `toc.xhtml`，並更新 `content.opf` 中的 `<dc:language>` 與標題。

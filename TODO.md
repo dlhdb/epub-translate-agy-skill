@@ -54,3 +54,18 @@
 #### Phase 6: 全套回歸測試驗證
 - [x] 執行現有所有單元與整合測試，確保 100% 通過（`Ran 7 tests in 0.006s, OK`）。
 
+---
+
+## 機械化格式檢查與 LLM 統一針對性修復（Deterministic Linter + Targeted LLM Repair）
+
+### 核心目標
+確立「機械化負責格式檢查（0 Token、毫秒級）、語意統一由 LLM 判斷、修復統一由 LLM 執行（最多 2 次熔斷）」架構原則，避免整章報廢重翻造成的 Token 浪費，並防止腳本黑盒硬修改帶來的副作用。
+
+### 分期任務清單
+- [x] 實作機械格式檢查工具 `.agents/skills/awesome-epub-translator/scripts/format_linter.py`（XML 閉合、重複屬性、標題階層、檔案截斷比率）。
+- [x] 撰寫獨立單元測試 `tests/test_format_linter.py`，驗證 5 大格式檢查與 JSON 輸出功能（全部通過）。
+- [x] 更新 `SKILL.md` Step 6.2：整合 `format_linter.py` 驗收與 LLM 針對性修復流程（最多 2 次修訂後熔斷）。
+- [x] 更新 `.opencode/agents/epub-translator.md` Directive 8：指導 Subagent 接收 linter 診斷資訊進行精準修復，保留有效譯文。
+- [x] 更新 `AGENTS.md`、`TECHNICAL_DETAILS.md`、`README.md`：同步新架構時序圖與核心特色描述。
+- [x] 全套測試回歸驗證（14 項測試全部通過）。
+
