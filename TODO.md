@@ -52,5 +52,5 @@
 - [x] 更新 `TECHNICAL_DETAILS.md`：Mermaid 架構圖改繪單代理內部 Pass 1 $\rightarrow$ Pass 2 流程。
 
 #### Phase 6: 全套回歸測試驗證
-- [ ] 執行現有所有單元與整合測試，確保 100% 通過。
+- [x] 執行現有所有單元與整合測試，確保 100% 通過（`Ran 7 tests in 0.006s, OK`）。
 
