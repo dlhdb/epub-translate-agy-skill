@@ -24,9 +24,8 @@ The user provides these when invoking the skill:
 | Output path | No (default: auto) | Custom output file path | `/path/to/output.epub` |
 | Tone/style | No (default: auto-detect) | Style hint for translation | `"formal and academic"` |
 | Pause between rounds | No (default: ask) | Whether to pause after each parallel round for confirmation | `yes`, `no` |
-| Quality mode | No (default: standard) | `standard` = fast, `high-quality` = uses QA Subagent for deep semantic review | `high-quality` |
-| Translator model | No (default: `google/gemini-flash-lite-latest`) | Model for translation subagents via `--translator-model` | `google/gemini-flash-lite-latest`, `anthropic/claude-3-7-sonnet` |
-| QA model | No (default: `google/gemini-flash-latest`) | Model for QA reviewer subagents via `--qa-model` | `google/gemini-flash-latest`, `google/gemini-2.5-pro` |
+| Quality mode | No (default: standard) | `standard` = fast, `high-quality` = enables in-memory Two-Pass Self-Reflection & Editorial QA | `high-quality` |
+| Translator model | No (default: `google/gemini-flash-lite-latest`) | Model for translation subagent via `--translator-model` | `google/gemini-flash-lite-latest`, `anthropic/claude-3-7-sonnet` |
 
 If the user doesn't specify all required parameters, ask for them before proceeding.
 
@@ -155,12 +154,8 @@ Translation uses up to 3 parallel subagents, each handling a subset of files. Th
 Launch up to 3 subagents concurrently using the `subagent` tool. Use the pre-defined specialized translation agent: `agent: "epub-translator"`.
 
 **Model Parameterization:**
-- **Translation Subagent (`epub-translator`)**:
-  - If the user specified `--translator-model`, pass `model: "<specified_model>"` in the subagent call.
-  - If not specified, **omit the `model` parameter entirely** so `epub-translator` automatically uses its pre-configured model (`google/gemini-flash-lite-latest` from `.opencode/agents/epub-translator.md`).
-- **QA Subagent (`epub-qa-reviewer`)**:
-  - If the user specified `--qa-model`, pass `model: "<specified_model>"` in the subagent call.
-  - If not specified, **omit the `model` parameter entirely** so `epub-qa-reviewer` automatically uses its pre-configured model (`google/gemini-flash-latest` from `.opencode/agents/epub-qa-reviewer.md`).
+- If the user specified `--translator-model`, pass `model: "<specified_model>"` in the subagent call.
+- If not specified, **omit the `model` parameter entirely** so `epub-translator` automatically uses its pre-configured model (`google/gemini-flash-lite-latest` from `.opencode/agents/epub-translator.md`).
 
 Configure each translation subagent call with:
 - **agent**: `epub-translator`
@@ -266,11 +261,8 @@ When `--high-quality` is specified, high translation fidelity and structural int
    - Background parallel execution (`background: true`) is completely race-condition-free.
    - Resumability is simple: any file existing in `<work_dir>/_translated/<relative_path>` is valid and complete.
 
-3. **Optional Post-Translation QA Inspection (When `--qa-model` is specified)**:
-   If the user specifically requested external QA review or `--qa-model`:
-   - Root Orchestrator dispatches `epub-qa-reviewer` subagents to perform secondary semantic scoring.
-   - Saves structured QA reports to `<work_dir>/_translated/qa_reports/<filename>.md` and updates `<work_dir>/_translated/.qa_status.json`.
-   - If minor adjustments are recommended, `epub-translator` can be re-invoked with the specific feedback.
+3. **Guaranteed Quality at Write Time**:
+   Because quality verification and structural correction happen in-memory before the file is ever written, every chapter written to `_translated/` is immediately production-ready without requiring secondary external ping-pong review loops.
 
 #### 6.2: Collect and Verify Results
 

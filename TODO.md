@@ -28,3 +28,29 @@
 - [x] 撰寫單元測試 (`tests/test_two_pass_rules.py`)，驗證 Two-Pass 4 大核心檢核標準（XML 屬性合法性、標題階層、目錄父項完整性、人稱一致性）。
 - [x] 撰寫整合測試 (`tests/test_translated_output_qa.py`)，自動驗證現有產出全部通過 XML 解析與 Two-Pass 規範檢核。
 - [x] 執行全套測試，7 項單元/整合測試全數通過（`Ran 7 tests in 0.005s, OK`）。
+
+---
+
+## 純粹單一子代理架構（Pure Single-Subagent Architecture）精簡
+
+### 核心目標
+徹底移除冗餘的 `epub-qa-reviewer.md`，使整個系統達到純粹極簡的 **1 個 Skill + 1 個 Subagent (`epub-translator`)**。
+全面清除專案文件中的 `--qa-model` 歷史包袱，確立以 `epub-translator` 內部 Two-Pass 自審為唯一核心的高品質翻譯架構。
+
+### 分期任務清單
+
+#### Phase 4: 物理移除冗餘 Subagent 與淨化 Skill 規範
+- [x] 刪除 `.opencode/agents/epub-qa-reviewer.md`。
+- [x] 修改 `.agents/skills/awesome-epub-translator/SKILL.md`：
+  - 參數表移除 `QA model` (`--qa-model`)。
+  - Step 6.1 移除所有調度 QA reviewer 與 `--qa-model` 分支。
+  - Step 6.1.5 完全確立為純粹的 Translator 內部雙階段自省完稿，無外部 QA 呼叫。
+
+#### Phase 5: 全面更新專案文件與架構圖
+- [ ] 更新 `AGENTS.md`：架構樹移除 `epub-qa-reviewer.md`，更新設計決策為純粹 Single-Subagent。
+- [ ] 更新根目錄 `README.md` 與技能 `README.md`：移除 `--qa-model` 範例與多代理人描述。
+- [ ] 更新 `TECHNICAL_DETAILS.md`：Mermaid 架構圖改繪單代理內部 Pass 1 $\rightarrow$ Pass 2 流程。
+
+#### Phase 6: 全套回歸測試驗證
+- [ ] 執行現有所有單元與整合測試，確保 100% 通過。
+
