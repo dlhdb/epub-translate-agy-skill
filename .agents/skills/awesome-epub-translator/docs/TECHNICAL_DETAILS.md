@@ -20,17 +20,15 @@
 graph TD
     User([使用者]) -->|"啟動指令"| MainAgent["主 Agent（星狀協調者）"]
     
-    subgraph FileSystem [檔案系統]
+    subgraph FileSystem ["檔案系統"]
         FS[("工作目錄<br/>_translation_work/")]
         SkillDoc["SKILL.md & Prompt"]
-        QAReport[("QA 報告與狀態<br/>qa_reports/ & .qa_status.json")]
     end
     
     MainAgent -.->|"讀取指令與規則"| SkillDoc
     MainAgent <-->|"解壓縮 / 驗收 / 打包"| FS
-    MainAgent <-->|"管理狀態與儲存報告"| QAReport
     
-    subgraph Subagents [執行子代理群 (epub-translator)]
+    subgraph Subagents ["執行子代理群 (epub-translator)"]
         Sub1["Translator Subagent 1<br/>(Pass 1 初譯 + Pass 2 編輯自省)"]
         Sub2["Translator Subagent 2<br/>(Pass 1 初譯 + Pass 2 編輯自省)"]
     end
@@ -63,7 +61,7 @@ sequenceDiagram
         Note over S: Pass 1: 初步翻譯<br/>Pass 2: 記憶體 QA 自我批判與修復
         S->>F: 7. 單次原子寫入至 _translated/
         S-->>M: 8. 回報翻譯完成 (自檢通過)
-        F-->>M: 9. 完整性驗收
+        M->>F: 9. 完整性驗收 (檢查標籤閉合與無截斷)
     end
     
     M->>F: 10. 重新打包 (自動排除暫存檔)

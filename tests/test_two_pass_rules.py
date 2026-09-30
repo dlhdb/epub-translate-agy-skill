@@ -37,16 +37,23 @@ class TestTwoPassSelfReflectionRules(unittest.TestCase):
         <h1 class="center" id="intro">Introduction</h1>
         <p id="intro-tr" class="center translated">導言</p>
         """
+        demoted_pair_with_comment = """
+        <h1 class="center" id="intro">Introduction</h1>
+        <!-- section divider -->
+        <p id="intro-tr" class="center translated">導言</p>
+        """
         preserved_pair = """
         <h1 class="center" id="intro">Introduction</h1>
         <h1 class="center translated" id="intro-tr">導言</h1>
         """
 
-        # Regex detects if h1-h6 is immediately followed by a <p> tag containing class="...translated..."
-        demote_pattern = re.compile(r'<h([1-6])[^>]*>.*?</h\1>\s*<p[^>]*class="[^"]*\btranslated\b[^"]*"', re.DOTALL)
+        # Regex detects if h1-h6 is immediately followed by a <p> tag containing class="...translated...",
+        # even if separated by whitespace or HTML comments.
+        demote_pattern = re.compile(r'<h([1-6])[^>]*>.*?</h\1>(?:\s*|<!--.*?-->)*<p[^>]*class="[^"]*\btranslated\b[^"]*"', re.DOTALL)
 
         self.assertTrue(bool(demote_pattern.search(demoted_pair_simple)), "Should detect simple demoted heading")
         self.assertTrue(bool(demote_pattern.search(demoted_pair_with_attrs)), "Should detect demoted heading with multiple attributes/classes")
+        self.assertTrue(bool(demote_pattern.search(demoted_pair_with_comment)), "Should detect demoted heading even when comments exist between tags")
         self.assertFalse(bool(demote_pattern.search(preserved_pair)), "Preserved pair should not be flagged as demoted")
 
     def test_toc_container_translation_rule(self):

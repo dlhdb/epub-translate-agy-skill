@@ -63,7 +63,7 @@ class TestTranslatedChaptersPassTwoPassQA(unittest.TestCase):
 
     def test_no_demoted_headings(self):
         """Headings must not be demoted to p."""
-        demote_pattern = re.compile(r'<h([1-6])[^>]*>.*?</h\1>\s*<p[^>]*class="[^"]*\btranslated\b[^"]*"', re.DOTALL)
+        demote_pattern = re.compile(r'<h([1-6])[^>]*>.*?</h\1>(?:\s*|<!--.*?-->)*<p[^>]*class="[^"]*\btranslated\b[^"]*"', re.DOTALL)
         for f in self.files:
             with self.subTest(file=os.path.basename(f)):
                 with open(f, 'r', encoding='utf-8') as fh:
