@@ -37,4 +37,4 @@
 
 本技能的核心邏輯與提示詞架構移植自開源專案 [awesome-epub-translator-skill](https://github.com/ludengz/awesome-epub-translator-skill)。
 - **原始作者**：ludengz
-- **適配說明**：本版本已對核心底層進行深度改寫，轉換為 OpenCode 原生的 `read`、`write`、`subagent` 工具呼叫，並利用星狀 Maker-Checker 調度架構實現高品質並行翻譯與審查。
+- **適配說明**：本版本已對核心底層進行深度改寫，轉換為 OpenCode 原生的 `read`、`write`、`subagent` 工具呼叫，並結合 Two-Pass 記憶體自我批判（Two-Pass Self-Reflection）與星狀 QA 審查架構實現高品質並行翻譯與審查。

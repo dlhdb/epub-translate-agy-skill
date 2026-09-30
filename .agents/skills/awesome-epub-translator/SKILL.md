@@ -232,9 +232,10 @@ Reconstruct the complete XHTML file in memory, then write it in one shot:
 3. Update `<html>` tag: change `lang="xx"` and `xml:lang="xx"` to the target language code
 4. Keep `<head>` section entirely unchanged (title, CSS links, meta tags)
 5. Replace `<body>` content with the translated content (or bilingual interleaved content)
-6. Create the necessary subdirectories: `mkdir -p "<work_dir>/_translated/<subdirs>/"`
-7. **Write the entire file** to `<work_dir>/_translated/<relative_path>` using the **`write` tool** — this must be the complete file from XML declaration to closing `</html>` tag, in a single Write call
-8. Report: "Translated: <filename> (X/N)"
+6. **High Quality In-Memory Self-Reflection**: If High Quality mode (`--high-quality`) is active, conduct the **Step 6.1.5 Two-Pass Editorial QA inspection** in memory now (checking attribute syntax, heading hierarchy, TOC containers, and terminology consistency) and apply any fixes before proceeding to write.
+7. Create the necessary subdirectories: `mkdir -p "<work_dir>/_translated/<subdirs>/"`
+8. **Write the entire file** to `<work_dir>/_translated/<relative_path>` using the **`write` tool** — this must be the complete, verified file from XML declaration to closing `</html>` tag, in a single Write call
+9. Report: "Translated: <filename> (X/N)"
 
 Each subagent translates its assigned files **sequentially** within its own context (repeating Steps 6.1.1 through 6.1.4), maintaining batch-to-batch "previous context" continuity across files. Once all its assigned files are written, the translator subagent reports completion.
 
@@ -287,7 +288,7 @@ After all subagents and QA reviews complete:
 
 3. Report results:
    - "Translated X/N chapters (using K parallel subagents)."
-   - If High Quality mode is active: report QA summary table (filename, verdict, score, revision attempts).
+   - If High Quality mode is active: report Two-Pass self-reflection verification status (and include the QA summary table if `--qa-model` was specified).
    - If any files were incomplete: "Y files had incomplete translations and will be retried."
 
 **Session management:** If more files remain after this round (including retries from incomplete translations):

@@ -12,20 +12,39 @@ import xml.etree.ElementTree as ET
 class TestTranslatedChaptersPassTwoPassQA(unittest.TestCase):
     def setUp(self):
         self.repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        self.translated_dir = os.path.join(
+        # Target directories: always include committed micro-test-case fixtures,
+        # plus the transient translation work directory if it exists locally.
+        self.target_dirs = []
+        fixture_dir = os.path.join(
+            self.repo_root,
+            "tests",
+            "epub-translation-evaluator",
+            "micro-test-case",
+            "v2",
+            "OEBPS"
+        )
+        if os.path.isdir(fixture_dir):
+            self.target_dirs.append(fixture_dir)
+
+        work_dir = os.path.join(
             self.repo_root,
             "to-be-translated",
             "Quick Start Guide - John Schember_translation_work",
             "_translated",
             "text"
         )
-        self.assertTrue(os.path.isdir(self.translated_dir), f"Directory {self.translated_dir} must exist")
+        if os.path.isdir(work_dir):
+            self.target_dirs.append(work_dir)
+
+        self.files = []
+        for d in self.target_dirs:
+            self.files.extend(glob.glob(os.path.join(d, "*.xhtml")))
+
+        self.assertGreater(len(self.files), 0, "Should find at least one XHTML file across fixtures and work directories")
 
     def test_all_chapters_are_valid_xml(self):
         """All chapters must parse as valid XML."""
-        files = glob.glob(os.path.join(self.translated_dir, "*.xhtml"))
-        self.assertGreater(len(files), 0, "Should have translated files")
-        for f in files:
+        for f in self.files:
             with self.subTest(file=os.path.basename(f)):
                 try:
                     tree = ET.parse(f)
@@ -35,9 +54,8 @@ class TestTranslatedChaptersPassTwoPassQA(unittest.TestCase):
 
     def test_no_duplicate_attributes(self):
         """Check for malformed duplicate attributes like class="... class="..."."""
-        files = glob.glob(os.path.join(self.translated_dir, "*.xhtml"))
         pattern = re.compile(r'class="[^"]*class="')
-        for f in files:
+        for f in self.files:
             with self.subTest(file=os.path.basename(f)):
                 with open(f, 'r', encoding='utf-8') as fh:
                     content = fh.read()
@@ -45,9 +63,8 @@ class TestTranslatedChaptersPassTwoPassQA(unittest.TestCase):
 
     def test_no_demoted_headings(self):
         """Headings must not be demoted to p."""
-        files = glob.glob(os.path.join(self.translated_dir, "*.xhtml"))
-        demote_pattern = re.compile(r'<h([1-6])[^>]*>.*?</h\1>\s*<p class="translated">', re.DOTALL)
-        for f in files:
+        demote_pattern = re.compile(r'<h([1-6])[^>]*>.*?</h\1>\s*<p[^>]*class="[^"]*\btranslated\b[^"]*"', re.DOTALL)
+        for f in self.files:
             with self.subTest(file=os.path.basename(f)):
                 with open(f, 'r', encoding='utf-8') as fh:
                     content = fh.read()

@@ -49,7 +49,7 @@ graph TD
 ```
 
 ### 執行流程圖 (Sequence)
-此流程展示了從解壓縮、分批翻譯、主協調者星狀 Maker-Checker 驗收糾錯到最終打包的時序互動。
+此流程展示了從解壓縮、分批翻譯（含內部 Two-Pass 自省）、可選外部 QA 驗收糾錯到最終打包的時序互動。
 
 ```mermaid
 sequenceDiagram
@@ -65,15 +65,16 @@ sequenceDiagram
     M->>F: 3. 擷取風格畫像
     
     loop 每一回合 (Round)
-        M->>F: 4. 掃描目錄與 .qa_status.json (跳過已完成審查的檔案)
+        M->>F: 4. 掃描目錄 (跳過已翻譯檔案)
         M->>M: 5. 依大小組裝任務 (Bin Packing)
-        M->>S: 6. 派發翻譯子代理並注入 Prompt (Phase 1: Maker)
-        S->>F: 7. 提取原文、翻譯並注入寫出至 _translated/
-        S-->>M: 8. 回報翻譯初稿完成
+        M->>S: 6. 派發翻譯子代理並注入 Prompt (含 Two-Pass 自檢指令)
+        S->>S: 7. Pass 1 初譯 & Pass 2 編輯自審自修
+        S->>F: 8. 單次原子寫入至 _translated/
+        S-->>M: 9. 回報翻譯完成 (含自檢通過狀態)
         
-        opt High Quality 模式 (Phase 2 & 3: Checker & Self-Correction)
-            M->>Q: 9. 主代理主動喚醒 QA 審查 (Checker)
-            Q->>F: 讀取原文、譯文初稿與風格畫像
+        opt 可選外部 QA 審查 (指定 --qa-model 時)
+            M->>Q: 10. 主代理喚醒 QA 審查 (Checker)
+            Q->>F: 讀取原文、譯文與風格畫像
             Q-->>M: 回傳 QA 報告 (APPROVED 或 NEEDS_REVISION)
             M->>F: 儲存 QA 報告至 qa_reports/
             
@@ -133,19 +134,18 @@ Subagent 在翻譯具體檔案時，改為使用**腳本輔助 (Script-Assisted)
 4. **注入與寫出 (Inject)**：
    - 翻譯完成後，使用 `epub_translator_utils.py inject` 將翻譯好的字典由後往前精準替換回原始 XHTML 中，一次性輸出到 `_translated/` 目錄，確保 100% 的結構一致性。
 
-### D. 高質量 QA 模式 (Maker-Checker Architecture)
-為了追求極致的翻譯品質，系統提供了 `--high-quality` 參數，啟用主協調者統一調度的星狀 Maker-Checker 架構：
-1. **星狀協調模式 (Star / Hub-and-Spoke Pattern)**：
-   - 採用 OpenCode 扁平調度模式，由 **主 Agent（Root Orchestrator）** 統一掌控派發與審查，子代理人各司其職，維持職責分離與乾淨上下文。
-2. **深度語意審查 (Deep Semantic Review)**：
-   - 各章節翻譯初稿寫入 `_translated/` 後，主 Agent 主動以並行方式（最多 3 個）喚醒 `epub-qa-reviewer` 子代理人。
-   - QA 對照 `style_profile.md` 與原文，進行語氣、漏翻、行內標籤包覆與專業術語等深度審查，產出結構化評估報告與修改建議。
-   - 主 Agent 將報告持久化儲存於 `_translated/qa_reports/<filename>.md`。
-3. **自我修正迴圈與終止防護 (Self-Correction Loop & Circuit Breaker)**：
-   - 若 QA 審查判定為 `NEEDS_REVISION`（分數 < 4），主 Agent 派發自包含（Self-contained）的修訂任務至 `epub-translator`，將具體錯誤定位與修改方針帶入，由翻譯者針對性覆寫草稿。
-   - 修訂後主 Agent 再次調用 QA 進行複查。
-   - **終止防護**：設定最多修訂 2 次。若達上限仍未獲 Approved，標記為 `APPROVED_WITH_WARNING` 並記錄警告，避免無窮迴圈與 Token 耗盡。
-   - 狀態由 `_translated/.qa_status.json` 精確管理，確保中斷時斷點續傳的可靠性。
+### D. 高質量 QA 模式 (Two-Pass Self-Reflection & Optional Maker-Checker)
+為了追求極致的翻譯品質，系統提供了 `--high-quality` 參數，核心採用 **Two-Pass 記憶體自我批判架構**，並支援可選的外部星狀 QA 複查：
+1. **內部雙階段自省 (Two-Pass In-Memory Self-Reflection)**：
+   - 翻譯子代理人 (`epub-translator`) 在調用 `write` 工具前，於記憶體中自主完成兩階段作業：
+     - **Pass 1 (初譯)**：依風格畫像完整產生目標語言譯文。
+     - **Pass 2 (挑剔編輯自審與修正)**：嚴格檢查 4 大關鍵失效模式：XML 屬性合法性（合併重複屬性如 `class="center translated"`）、標題階層保留（嚴禁 `h1`/`h2` 降級為 `p`）、目錄與容器節點完整性（父層目錄項必翻）、全篇人稱與台灣本地技術術語一致性。
+     - **原子化落盤**：修正完成後單次原子寫入 `_translated/`，確保落盤即為出版級成果。
+   - **優勢**：完全消除 Orchestrator 多目錄檔案搬移負擔與狀態競爭，背景並行（`background: true`）安全可靠。
+2. **可選外部 QA 二次語意審查 (Optional Maker-Checker Secondary Review)**：
+   - 當使用者指定 `--qa-model` 或明確要求外部審查時，主 Agent 喚醒獨立的 `epub-qa-reviewer` 子代理人。
+   - QA 對照 `style_profile.md` 與原文進行語意與標籤評審，產出結構化評估報告與修改建議（儲存於 `_translated/qa_reports/<filename>.md`）。
+   - 若評分低於 4 分，主 Agent 派發自包含修訂任務至 `epub-translator`，設定最多修訂 2 次，並以 `_translated/.qa_status.json` 管理狀態避免無窮迴圈。
 
 ### E. 後置處理與打包
 1. **翻譯目錄與 Metadata**：主 Agent 接手翻譯 `toc.ncx` / `toc.xhtml`，並更新 `content.opf` 中的 `<dc:language>` 與標題。

@@ -29,21 +29,25 @@ class TestTwoPassSelfReflectionRules(unittest.TestCase):
 
     def test_heading_preservation_rule(self):
         """Pass 2 rule 2: Translated copy must preserve heading tag (h1 -> h1, not p)."""
-        demoted_pair = """
+        demoted_pair_simple = """
         <h1 class="center" id="intro">Introduction</h1>
         <p class="translated">導言</p>
+        """
+        demoted_pair_with_attrs = """
+        <h1 class="center" id="intro">Introduction</h1>
+        <p id="intro-tr" class="center translated">導言</p>
         """
         preserved_pair = """
         <h1 class="center" id="intro">Introduction</h1>
         <h1 class="center translated" id="intro-tr">導言</h1>
         """
 
-        # In demoted pair, h1 is immediately followed by p with class="translated"
-        is_demoted = bool(re.search(r'<h([1-6])[^>]*>.*?</h\1>\s*<p class="translated">', demoted_pair, re.DOTALL))
-        is_preserved_demoted = bool(re.search(r'<h([1-6])[^>]*>.*?</h\1>\s*<p class="translated">', preserved_pair, re.DOTALL))
+        # Regex detects if h1-h6 is immediately followed by a <p> tag containing class="...translated..."
+        demote_pattern = re.compile(r'<h([1-6])[^>]*>.*?</h\1>\s*<p[^>]*class="[^"]*\btranslated\b[^"]*"', re.DOTALL)
 
-        self.assertTrue(is_demoted, "Should detect demoted heading")
-        self.assertFalse(is_preserved_demoted, "Preserved pair should not be flagged as demoted")
+        self.assertTrue(bool(demote_pattern.search(demoted_pair_simple)), "Should detect simple demoted heading")
+        self.assertTrue(bool(demote_pattern.search(demoted_pair_with_attrs)), "Should detect demoted heading with multiple attributes/classes")
+        self.assertFalse(bool(demote_pattern.search(preserved_pair)), "Preserved pair should not be flagged as demoted")
 
     def test_toc_container_translation_rule(self):
         """Pass 2 rule 3: Parent category list items must also have translated counterparts."""
@@ -69,10 +73,12 @@ class TestTwoPassSelfReflectionRules(unittest.TestCase):
 
         # In missing_parent_tr, the anchor is immediately followed by <ul> without a translated sibling
         has_untranslated_container = bool(re.search(r'<a href="[^"]*">([^<]+)</a>\s*<ul>', missing_parent_tr))
+        complete_untranslated_container = bool(re.search(r'<a href="[^"]*">([^<]+)</a>\s*<ul>', complete_parent_tr))
         has_complete_container = bool(re.search(r'<a href="[^"]*">([^<]+)</a>\s*<a href="[^"]*" class="translated">', complete_parent_tr))
 
-        self.assertTrue(has_untranslated_container)
-        self.assertTrue(has_complete_container)
+        self.assertTrue(has_untranslated_container, "Should detect untranslated parent container")
+        self.assertFalse(complete_untranslated_container, "Complete container should not have untranslated anchor followed by ul")
+        self.assertTrue(has_complete_container, "Should confirm presence of translated sibling anchor")
 
     def test_pronoun_consistency_rule(self):
         """Pass 2 rule 4: Uniform second-person address (avoid mixing '你' and '您')."""
