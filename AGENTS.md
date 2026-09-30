@@ -45,7 +45,7 @@ The translation workflow is triggered when users ask the agent to translate an e
 - **Style Profile System**: Before translating the whole book, the agent reads early chapters to analyze the book's genre, tone, and voice, saving a profile to `style_profile.md`. This profile is passed to subagents to ensure consistent tone across all translated chapters.
 - **Checkpoint-based Resumability**: Translated chapters are saved in a temporary directory. If the agent hits a context limit, network error, or simply pauses, re-running the skill will skip already-translated and approved XHTML files.
 - **Bilingual Mode**: An optional mode where the agent interleaves the original text and the translated text with specific CSS classes, ideal for language learners.
-- **Star Maker-Checker QA Architecture**: An optional `--high-quality` mode where the Root Orchestrator spawns a dedicated QA Subagent (`epub-qa-reviewer`) to perform deep semantic reviews of translated chapters. If revisions are required, the Root Orchestrator re-dispatches `epub-translator` to address QA feedback before final approval.
+- **Two-Pass In-Memory Self-Reflection & QA**: In `--high-quality` mode, `epub-translator` subagents execute a two-pass in-memory editorial review prior to saving: Pass 1 generates the translation draft, and Pass 2 rigorously inspects and corrects XML attribute syntax, tag hierarchy, completeness, and style profile adherence. Optional secondary review can be conducted using `epub-qa-reviewer`.
 
 ## Work Directory & Debugging
 

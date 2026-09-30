@@ -173,7 +173,10 @@ Configure each translation subagent call with:
   3. **Output mode**: `pure` or `bilingual`
   4. **Assigned files**: List of relative paths (e.g., `OEBPS/Text/chapter_01.xhtml`, size, spine index)
   5. **Style profile path**: `<work_dir>/_translated/style_profile.md` (the subagent will read this directly)
-  6. **QA Mode Notice** (if `--high-quality` is specified): "High Quality Mode is ENABLED. Chapters will undergo independent semantic QA review by the orchestrator after translation. Focus on translation fidelity, style profile adherence, and 100% tag preservation."
+  6. **QA Mode Notice** (if `--high-quality` is specified): "High Quality Mode (Two-Pass Self-Reflection) is ENABLED. You MUST execute Directive 5 (Two-Pass Self-Reflection & Quality Verification Protocol) in memory before calling write:
+     - Pass 1: Translate content in memory.
+     - Pass 2: Self-critique and fix in memory: merge attributes cleanly (`class=\"center translated\"`), preserve heading levels (`<h1>`/`<h2>` must not be demoted to `<p>`), ensure all container list items in navigation/TOC are translated, and enforce uniform pronouns and local terminology.
+     - Pass 3: Atomic write complete XHTML to `<work_dir>/_translated/<relative_path>`."
 
 ##### 6.1.1: Read the File
 - Use the `read` tool to read the XHTML file from the work directory
@@ -235,77 +238,38 @@ Reconstruct the complete XHTML file in memory, then write it in one shot:
 
 Each subagent translates its assigned files **sequentially** within its own context (repeating Steps 6.1.1 through 6.1.4), maintaining batch-to-batch "previous context" continuity across files. Once all its assigned files are written, the translator subagent reports completion.
 
-##### 6.1.5: Maker-Checker QA Review & Self-Correction (High Quality Mode Only)
+##### 6.1.5: Two-Pass Self-Reflection & Editorial QA (High Quality Mode)
 
-If `--high-quality` is specified, the Root Agent (Orchestrator) manages an independent QA review and self-correction loop for all translated chapters before final acceptance.
+When `--high-quality` is specified, high translation fidelity and structural integrity are guaranteed through a **Two-Pass Self-Reflection Architecture**:
 
-> **Architecture Note**: OpenCode adopts a flat orchestrator pattern where subagents cannot invoke nested subagents. Having the Root Agent directly orchestrate both the Maker (`epub-translator`) and Checker (`epub-qa-reviewer`) maintains clean separation of concerns and seamless orchestration.
+```text
+[Input XHTML] ──> Pass 1: Translate in memory
+                        │
+                        ▼
+                  Pass 2: Editorial QA Self-Reflection & Self-Correction
+                          ├─ Merge attributes (e.g. class="center translated")
+                          ├─ Preserve heading hierarchy (h1/h2 cannot become p)
+                          ├─ Verify container TOC links and complete translation
+                          └─ Enforce consistent pronouns and local terminology
+                        │
+                        ▼
+                  Pass 3: Atomic write to <work_dir>/_translated/<relative_path>
+```
 
-###### Phase A: Parallel QA Dispatch
-1. Collect all chapters translated in the current round.
-2. Ensure `<work_dir>/_translated/qa_reports/` directory exists (`mkdir -p "<work_dir>/_translated/qa_reports/"`).
-3. Dispatch `epub-qa-reviewer` subagents (up to 3 in parallel) for the translated chapters:
-   - **agent**: `epub-qa-reviewer`
-   - **description**: `QA Review: <filename>`
-   - **model**: `<qa_model>` (optional, pass only if explicitly specified by user with `--qa-model`)
-   - **background**: `true` (or run concurrently)
-   - **prompt**: A structured QA task payload containing:
-     1. **Work directory**: `<work_dir>`
-     2. **Source file path**: `<work_dir>/<relative_path>`
-     3. **Translated draft path**: `<work_dir>/_translated/<relative_path>`
-     4. **Style profile path**: `<work_dir>/_translated/style_profile.md`
-     5. **Target language** and **Output mode** (`pure` or `bilingual`)
-4. The QA Subagent conducts a **Deep Semantic Review**:
-   - Compares source vs. translated text against `style_profile.md`.
-   - Checks for missing translations, awkward phrasing, or stiff literal translations.
-   - Verifies structural integrity (tags properly closed, no truncation, code blocks untouched).
-5. The QA Subagent returns a structured Markdown report:
-   ```markdown
-   ### QA Review Report: [filename]
-   - **Verdict**: [APPROVED | NEEDS_REVISION]
-   - **Rubric Score**: [1-5]/5
-   - **Summary**: ...
-   #### Key Findings & Evidence
-   ...
-   #### Revision Instructions (Required if NEEDS_REVISION)
-   ...
-   ```
-6. The Root Agent saves each QA report to `<work_dir>/_translated/qa_reports/<sanitized_relative_path>.md` using `write`.
+1. **In-Memory Two-Pass Execution**:
+   Each `epub-translator` subagent autonomously carries out Pass 1 (draft translation) and Pass 2 (editorial self-critique against the 4 failure modes) in memory before invoking `write`. This guarantees that every file written to `<work_dir>/_translated/<relative_path>` is already pre-verified and structurally sound.
 
-###### Phase B: Self-Correction Revision Loop
-For each chapter reviewed:
+2. **Zero Coordination Overhead**:
+   Because quality verification is encapsulated within each translator subagent:
+   - Root Orchestrator does not need to shuffle files across multiple pipeline directories.
+   - Background parallel execution (`background: true`) is completely race-condition-free.
+   - Resumability is simple: any file existing in `<work_dir>/_translated/<relative_path>` is valid and complete.
 
-- **If Verdict is `APPROVED` (or Rubric Score >= 4)**:
-  - Update `<work_dir>/_translated/.qa_status.json`:
-    ```json
-    {
-      "<relative_path>": {
-        "status": "APPROVED",
-        "score": 5,
-        "revisions": 0
-      }
-    }
-    ```
-  - Report: "QA Approved: <filename> (Score: X/5)"
-
-- **If Verdict is `NEEDS_REVISION` (Rubric Score < 4)**:
-  - Check previous revision attempts from `.qa_status.json` (defaults to 0):
-    - **If revision count < 2 (up to 2 revision attempts allowed)**:
-      - Increment revision count in `.qa_status.json` with status `"NEEDS_REVISION"`.
-      - Dispatch `agent: "epub-translator"` with a **Self-Contained Revision Payload**:
-        - **Work directory**: `<work_dir>`
-        - **Target file to revise**: `<work_dir>/_translated/<relative_path>`
-        - **Source reference**: `<work_dir>/<relative_path>`
-        - **Style profile**: `<work_dir>/_translated/style_profile.md`
-        - **Target language** and **Output mode**
-        - **QA Report & Revision Instructions**:
-          Inline the exact `Revision Instructions` and `Key Findings & Evidence` from the QA Reviewer.
-        - **Instruction**:
-          "You are revising an existing translation. Read the current translated draft and the source file. Address every item in the QA Revision Instructions, maintain valid XML/HTML structure and style profile consistency, and overwrite `<work_dir>/_translated/<relative_path>` completely in one shot using the write tool."
-      - After the translator finishes revising, re-dispatch `epub-qa-reviewer` for this file.
-    - **If revision count >= 2 (max retries reached)**:
-      - Terminate the loop gracefully: mark status as `"APPROVED_WITH_WARNING"` in `.qa_status.json`.
-      - Report warning: "QA Warning: <filename> reached max revision limit (2). Retaining current draft with score X/5 to avoid infinite loop."
+3. **Optional Post-Translation QA Inspection (When `--qa-model` is specified)**:
+   If the user specifically requested external QA review or `--qa-model`:
+   - Root Orchestrator dispatches `epub-qa-reviewer` subagents to perform secondary semantic scoring.
+   - Saves structured QA reports to `<work_dir>/_translated/qa_reports/<filename>.md` and updates `<work_dir>/_translated/.qa_status.json`.
+   - If minor adjustments are recommended, `epub-translator` can be re-invoked with the specific feedback.
 
 #### 6.2: Collect and Verify Results
 

@@ -17,10 +17,12 @@
   - 維持單次原子性 `write` 落盤規範至 `<work_dir>/_translated/<relative_path>`。
 
 #### Phase 2: 更新 Skill 規範檔案
-- [ ] **`.agents/skills/awesome-epub-translator/SKILL.md`**：
+- [x] **`.agents/skills/awesome-epub-translator/SKILL.md`**：
   - 簡化 Step 6.1 與 6.1.5：將高品質模式定義為在 Translator 調度中強制注入 Two-Pass 自檢指令。
   - 維持單一乾淨的工作目錄結構（`<work_dir>/_translated/` 與 `<work_dir>/_staging/`）。
   - 確保支援安全背景並行（`background: true`）。
+- [x] **`AGENTS.md` 與 `README.md`**：
+  - 更新核心特色與設計決策，清楚標記 Two-Pass In-Memory Self-Reflection & Editorial QA 機制。
 
 #### Phase 3: 驗證與測試（Evals）
 - [ ] 撰寫單元與整合測試，檢驗 Two-Pass 檢核標準（XML 屬性合法性、標籤階層、目錄父項完整性）。

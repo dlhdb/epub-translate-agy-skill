@@ -37,8 +37,8 @@
    自動根據檔案大小進行智能分配，透過 OpenCode 的 `subagent` 工具呼叫最多 3 個子代理人 (`epub-translator`) 同時進行翻譯，大幅提升長篇書籍翻譯速度。
 3. **無縫雙語模式 (Bilingual Mode)**：
    除了純譯本外，支援產生中英（或原譯）對照的排版，並自動注入專屬的 CSS 樣式，方便語言學習者閱讀。
-4. **高品質 Maker-Checker 語意審查 (High Quality QA)**：
-   在 `--high-quality` 模式下，主協調者採用星狀架構調度獨立的 QA 審查員 (`epub-qa-reviewer`) 進行深度語意與標籤檢查；若發現漏翻或生硬句法即啟動自我糾錯迴圈，自動完成修正。
+4. **高品質 Two-Pass 記憶體自我批判自省 (High Quality QA)**：
+   在 `--high-quality` 模式下，翻譯子代理人 (`epub-translator`) 採用雙階段（Two-Pass）處理：在記憶體中完成初譯後，立即切換為挑剔的編輯視角進行自我審查，自動修正 XML 屬性重複（例如合併為 `class="center translated"`）、防止標題階層降級、補齊父層目錄項目與統一全書術語及人稱，確保落盤即為出版級完稿。此外亦支援派遣 `epub-qa-reviewer` 進行二次語意抽查。
 5. **自動斷點續傳 (Resumability)**：
    翻譯過程會建立 `_translation_work/` 暫存目錄並記錄審查狀態。如果遇到網路中斷或 Token 耗盡，重新要求翻譯同一個檔案時，系統會自動跳過已完成審查的章節。
 
