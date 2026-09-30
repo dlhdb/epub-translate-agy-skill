@@ -47,9 +47,9 @@
   - Step 6.1.5 完全確立為純粹的 Translator 內部雙階段自省完稿，無外部 QA 呼叫。
 
 #### Phase 5: 全面更新專案文件與架構圖
-- [ ] 更新 `AGENTS.md`：架構樹移除 `epub-qa-reviewer.md`，更新設計決策為純粹 Single-Subagent。
-- [ ] 更新根目錄 `README.md` 與技能 `README.md`：移除 `--qa-model` 範例與多代理人描述。
-- [ ] 更新 `TECHNICAL_DETAILS.md`：Mermaid 架構圖改繪單代理內部 Pass 1 $\rightarrow$ Pass 2 流程。
+- [x] 更新 `AGENTS.md`：架構樹移除 `epub-qa-reviewer.md`，更新設計決策為純粹 Single-Subagent。
+- [x] 更新根目錄 `README.md` 與技能 `README.md`：移除 `--qa-model` 範例與多代理人描述。
+- [x] 更新 `TECHNICAL_DETAILS.md`：Mermaid 架構圖改繪單代理內部 Pass 1 $\rightarrow$ Pass 2 流程。
 
 #### Phase 6: 全套回歸測試驗證
 - [ ] 執行現有所有單元與整合測試，確保 100% 通過。

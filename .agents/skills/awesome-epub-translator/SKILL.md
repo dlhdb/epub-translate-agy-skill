@@ -280,7 +280,7 @@ After all subagents and QA reviews complete:
 
 3. Report results:
    - "Translated X/N chapters (using K parallel subagents)."
-   - If High Quality mode is active: report Two-Pass self-reflection verification status (and include the QA summary table if `--qa-model` was specified).
+   - If High Quality mode is active: report Two-Pass self-reflection verification status.
    - If any files were incomplete: "Y files had incomplete translations and will be retried."
 
 **Session management:** If more files remain after this round (including retries from incomplete translations):

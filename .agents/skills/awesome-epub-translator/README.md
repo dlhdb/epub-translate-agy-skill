@@ -17,15 +17,15 @@
 - **雙語模式**："幫我翻譯 `book.epub` 成中文，請使用**雙語對照模式 (bilingual mode)**。"
 - **指定風格**："將這本小說翻譯成日文，請使用**輕鬆幽默的語氣**。"
 - **高品質 QA 模式**："翻譯 `book.epub` 到繁體中文，請**啟用高品質模式 (--high-quality)** 進行深度語意審查。"
-- **指定子代理模型**："翻譯 `book.epub` 到繁體中文，翻譯模型請使用 `--translator-model google/gemini-flash-lite-latest`，QA 審查請使用 `--qa-model google/gemini-flash-latest`。"
+- **指定子代理模型**："翻譯 `book.epub` 到繁體中文，翻譯模型請使用 `--translator-model google/gemini-flash-lite-latest`。"
 - **自訂輸出路徑**："翻譯完成後，請將檔案另存到 `~/Desktop/translated_book.epub`。"
 
 ### 完整範例 (Full Example)
 您可以將多項參數整合為一個完整指令，一次指定雙語對照、高品質審查以及自訂模型：
 - **中文範例**：
-  > "翻譯 `/path/to/book.epub` 到繁體中文，啟用高品質模式，使用雙語對照模式，翻譯模型指定為 `google/gemini-flash-lite-latest`，QA 審查模型指定為 `google/gemini-flash-latest`。"
+  > "翻譯 `/path/to/book.epub` 到繁體中文，啟用高品質模式，使用雙語對照模式，翻譯模型指定為 `google/gemini-flash-lite-latest`。"
 - **英文範例**：
-  > "Translate `/path/to/book.epub` to Traditional Chinese in bilingual mode with `--high-quality`, using `--translator-model google/gemini-flash-lite-latest` and `--qa-model google/gemini-flash-latest`."
+  > "Translate `/path/to/book.epub` to Traditional Chinese in bilingual mode with `--high-quality`, using `--translator-model google/gemini-flash-lite-latest`."
 
 ---
 
@@ -38,7 +38,7 @@
 3. **無縫雙語模式 (Bilingual Mode)**：
    除了純譯本外，支援產生中英（或原譯）對照的排版，並自動注入專屬的 CSS 樣式，方便語言學習者閱讀。
 4. **高品質 Two-Pass 記憶體自我批判自省 (High Quality QA)**：
-   在 `--high-quality` 模式下，翻譯子代理人 (`epub-translator`) 採用雙階段（Two-Pass）處理：在記憶體中完成初譯後，立即切換為挑剔的編輯視角進行自我審查，自動修正 XML 屬性重複（例如合併為 `class="center translated"`）、防止標題階層降級、補齊父層目錄項目與統一全書術語及人稱，確保落盤即為出版級完稿。此外亦支援派遣 `epub-qa-reviewer` 進行二次語意抽查。
+   在 `--high-quality` 模式下，翻譯子代理人 (`epub-translator`) 採用雙階段（Two-Pass）處理：在記憶體中完成初譯後，立即切換為挑剔的編輯視角進行自我審查，自動修正 XML 屬性重複（例如合併為 `class="center translated"`）、防止標題階層降級、補齊父層目錄項目與統一全書術語及人稱，確保落盤即為出版級完稿，免去外部反覆傳話與狀態混亂。
 5. **自動斷點續傳 (Resumability)**：
    翻譯過程會建立 `_translation_work/` 暫存目錄並記錄審查狀態。如果遇到網路中斷或 Token 耗盡，重新要求翻譯同一個檔案時，系統會自動跳過已完成審查的章節。
 

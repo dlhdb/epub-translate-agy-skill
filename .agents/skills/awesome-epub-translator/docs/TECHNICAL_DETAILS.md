@@ -30,34 +30,26 @@ graph TD
     MainAgent <-->|"解壓縮 / 驗收 / 打包"| FS
     MainAgent <-->|"管理狀態與儲存報告"| QAReport
     
-    subgraph Subagents [執行子代理群]
-        Sub1["Translator Subagent 1"]
-        Sub2["Translator Subagent 2"]
-        QA["QA Subagent<br/>(epub-qa-reviewer)"]
+    subgraph Subagents [執行子代理群 (epub-translator)]
+        Sub1["Translator Subagent 1<br/>(Pass 1 初譯 + Pass 2 編輯自省)"]
+        Sub2["Translator Subagent 2<br/>(Pass 1 初譯 + Pass 2 編輯自省)"]
     end
     
-    MainAgent -->|"Phase 1: 派發翻譯任務"| Sub1
-    MainAgent -->|"Phase 1: 派發翻譯任務"| Sub2
-    Sub1 <-->|"讀取原文 / 寫入譯文"| FS
-    Sub2 <-->|"讀取原文 / 寫入譯文"| FS
-    
-    MainAgent -->|"Phase 2: 派發語意審查"| QA
-    QA -.->|"讀取原文 / 譯文 / 風格畫像"| FS
-    QA -->>|"回傳 Verdict & 修改建議"| MainAgent
-    
-    MainAgent -.->|"Phase 3: 派發修訂任務 (若需修正)"| Sub1
+    MainAgent -->|"派發翻譯任務 (含 Two-Pass 自檢指令)"| Sub1
+    MainAgent -->|"派發翻譯任務 (含 Two-Pass 自檢指令)"| Sub2
+    Sub1 <-->|"讀取原文 / 原子寫入完稿"| FS
+    Sub2 <-->|"讀取原文 / 原子寫入完稿"| FS
 ```
 
 ### 執行流程圖 (Sequence)
-此流程展示了從解壓縮、分批翻譯（含內部 Two-Pass 自省）、可選外部 QA 驗收糾錯到最終打包的時序互動。
+此流程展示了從解壓縮、分批翻譯（內部 Two-Pass 自省）、落盤驗收到最終打包的時序互動。
 
 ```mermaid
 sequenceDiagram
     participant U as 使用者
     participant M as 主 Agent (Orchestrator)
     participant F as 檔案系統
-    participant S as 翻譯子代理 (Maker)
-    participant Q as QA Subagent (Checker)
+    participant S as 翻譯子代理 (epub-translator)
     
     U->>M: 要求翻譯 ePub
     M->>F: 1. 解壓縮
@@ -68,37 +60,14 @@ sequenceDiagram
         M->>F: 4. 掃描目錄 (跳過已翻譯檔案)
         M->>M: 5. 依大小組裝任務 (Bin Packing)
         M->>S: 6. 派發翻譯子代理並注入 Prompt (含 Two-Pass 自檢指令)
-        S->>S: 7. Pass 1 初譯 & Pass 2 編輯自審自修
-        S->>F: 8. 單次原子寫入至 _translated/
-        S-->>M: 9. 回報翻譯完成 (含自檢通過狀態)
-        
-        opt 可選外部 QA 審查 (指定 --qa-model 時)
-            M->>Q: 10. 主代理喚醒 QA 審查 (Checker)
-            Q->>F: 讀取原文、譯文與風格畫像
-            Q-->>M: 回傳 QA 報告 (APPROVED 或 NEEDS_REVISION)
-            M->>F: 儲存 QA 報告至 qa_reports/
-            
-            loop 糾錯修訂迴圈 (最多 2 次)
-                alt 審查判定 NEEDS_REVISION 且未達上限
-                    M->>S: 派發自包含修訂任務 (帶入具體 QA 建議)
-                    S->>F: 針對問題修訂並覆寫 _translated/
-                    S-->>M: 回報修訂完成
-                    M->>Q: 重新派發 QA 複查
-                    Q-->>M: 回傳複查結果
-                else 判定 APPROVED 或達上限 (APPROVED_WITH_WARNING)
-                    M->>F: 更新 .qa_status.json
-                end
-            end
-        end
-        
-        F-->>M: 10. 讀取最新狀態與完整性驗收
-        alt 嚴重損毀或截斷
-            M->>F: 刪除檔案 (下回合自動重試)
-        end
+        Note over S: Pass 1: 初步翻譯<br/>Pass 2: 記憶體 QA 自我批判與修復
+        S->>F: 7. 單次原子寫入至 _translated/
+        S-->>M: 8. 回報翻譯完成 (自檢通過)
+        F-->>M: 9. 完整性驗收
     end
     
-    M->>F: 11. 重新打包 (自動排除 qa_reports/ 與暫存檔)
-    M->>U: 輸出並回報完成 (含 QA 平均評分與修訂統計)
+    M->>F: 10. 重新打包 (自動排除暫存檔)
+    M->>U: 輸出並回報完成
 ```
 
 ## 2. 核心工作流程 (Workflow)
@@ -134,18 +103,14 @@ Subagent 在翻譯具體檔案時，改為使用**腳本輔助 (Script-Assisted)
 4. **注入與寫出 (Inject)**：
    - 翻譯完成後，使用 `epub_translator_utils.py inject` 將翻譯好的字典由後往前精準替換回原始 XHTML 中，一次性輸出到 `_translated/` 目錄，確保 100% 的結構一致性。
 
-### D. 高質量 QA 模式 (Two-Pass Self-Reflection & Optional Maker-Checker)
-為了追求極致的翻譯品質，系統提供了 `--high-quality` 參數，核心採用 **Two-Pass 記憶體自我批判架構**，並支援可選的外部星狀 QA 複查：
+### D. 高質量 QA 模式 (Two-Pass Self-Reflection in-Memory Architecture)
+為了追求極致的翻譯品質，系統提供了 `--high-quality` 參數，核心採用 **Two-Pass 記憶體自我批判架構**：
 1. **內部雙階段自省 (Two-Pass In-Memory Self-Reflection)**：
    - 翻譯子代理人 (`epub-translator`) 在調用 `write` 工具前，於記憶體中自主完成兩階段作業：
      - **Pass 1 (初譯)**：依風格畫像完整產生目標語言譯文。
      - **Pass 2 (挑剔編輯自審與修正)**：嚴格檢查 4 大關鍵失效模式：XML 屬性合法性（合併重複屬性如 `class="center translated"`）、標題階層保留（嚴禁 `h1`/`h2` 降級為 `p`）、目錄與容器節點完整性（父層目錄項必翻）、全篇人稱與台灣本地技術術語一致性。
      - **原子化落盤**：修正完成後單次原子寫入 `_translated/`，確保落盤即為出版級成果。
-   - **優勢**：完全消除 Orchestrator 多目錄檔案搬移負擔與狀態競爭，背景並行（`background: true`）安全可靠。
-2. **可選外部 QA 二次語意審查 (Optional Maker-Checker Secondary Review)**：
-   - 當使用者指定 `--qa-model` 或明確要求外部審查時，主 Agent 喚醒獨立的 `epub-qa-reviewer` 子代理人。
-   - QA 對照 `style_profile.md` 與原文進行語意與標籤評審，產出結構化評估報告與修改建議（儲存於 `_translated/qa_reports/<filename>.md`）。
-   - 若評分低於 4 分，主 Agent 派發自包含修訂任務至 `epub-translator`，設定最多修訂 2 次，並以 `_translated/.qa_status.json` 管理狀態避免無窮迴圈。
+   - **優勢**：完全消除 Orchestrator 多目錄檔案搬移負擔與狀態競爭，背景並行（`background: true`）安全可靠，無需額外維護外部 QA 子代理。
 
 ### E. 後置處理與打包
 1. **翻譯目錄與 Metadata**：主 Agent 接手翻譯 `toc.ncx` / `toc.xhtml`，並更新 `content.opf` 中的 `<dc:language>` 與標題。

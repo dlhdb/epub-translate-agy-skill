@@ -2,7 +2,7 @@
 
 這是一個專為 OpenCode 多代理（Multi-Agent）架構設計的電子書翻譯專案。
 
-本專案的核心是一個**完全獨立且可攜帶 (Portable)** 的技能 (Skill)：`awesome-epub-translator`，搭配 OpenCode 子代理人 (`epub-translator` 與 `epub-qa-reviewer`)。它能夠在保留原始排版的前提下，將整本 ePub 電子書翻譯為指定的目標語言。
+本專案的核心是一個**完全獨立且可攜帶 (Portable)** 的技能 (Skill)：`awesome-epub-translator`，搭配 OpenCode 子代理人 (`epub-translator`)。它能夠在保留原始排版的前提下，將整本 ePub 電子書翻譯為指定的目標語言。
 
 ## 📦 如何在你的專案中使用這個技能（安裝方式）
 
@@ -27,7 +27,7 @@
 ## 📂 專案核心結構
 
 - [`.agents/skills/awesome-epub-translator/`](.agents/skills/awesome-epub-translator/)：翻譯技能的核心模組，包含完整工作流指示、提示詞與文檔。
-- [`.opencode/agents/`](.opencode/agents/)：OpenCode 子代理人設定檔（`epub-translator` 與 `epub-qa-reviewer`）。
+- [`.opencode/agents/`](.opencode/agents/)：OpenCode 子代理人設定檔（`epub-translator`）。
 - [`AGENTS.md`](AGENTS.md)：提供給 OpenCode Agent 閱讀的專案級別守則（Repository Rules），幫助 Agent 了解這個工作區的架構與設計決策。
 - `README.md`：您現在正在閱讀的專案說明。
 
@@ -37,4 +37,4 @@
 
 本技能的核心邏輯與提示詞架構移植自開源專案 [awesome-epub-translator-skill](https://github.com/ludengz/awesome-epub-translator-skill)。
 - **原始作者**：ludengz
-- **適配說明**：本版本已對核心底層進行深度改寫，轉換為 OpenCode 原生的 `read`、`write`、`subagent` 工具呼叫，並結合 Two-Pass 記憶體自我批判（Two-Pass Self-Reflection）與星狀 QA 審查架構實現高品質並行翻譯與審查。
+- **適配說明**：本版本已對核心底層進行深度改寫，轉換為 OpenCode 原生的 `read`、`write`、`subagent` 工具呼叫，並結合 Two-Pass 記憶體自我批判（Two-Pass Self-Reflection）架構實現高品質並行翻譯。

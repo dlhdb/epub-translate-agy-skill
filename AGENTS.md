@@ -28,14 +28,13 @@ The translation workflow is triggered when users ask the agent to translate an e
 │               └── html_validator.py      # Python script for structural validation
 └── .opencode/
     └── agents/
-        ├── epub-translator.md             # Subagent configuration for translation worker
-        └── epub-qa-reviewer.md            # Subagent configuration for QA editorial reviewer
+        └── epub-translator.md             # Subagent configuration for translation worker (with Two-Pass QA)
 ```
 
 - **.agents/skills/awesome-epub-translator/**: Contains the skill that orchestrates the translation.
   - **SKILL.md** is the skill entry point. Its YAML frontmatter controls skill discovery and triggering. The body contains the step-by-step workflow the agent follows when translating.
   - **references/** files are read by the agent during execution to maintain rule adherence (e.g., `translation-prompt.md`).
-- **.opencode/agents/**: Contains the OpenCode specialized subagent configurations for `epub-translator` and `epub-qa-reviewer`.
+- **.opencode/agents/**: Contains the OpenCode specialized subagent configuration for `epub-translator`.
 - **.agents/skills/epub-translation-evaluator/**: Contains the validation skill used to compare standard (v1) and high-quality (v2) translations, or different prompt versions, using objective rubrics and structural checks.
 
 ## Key Design Decisions
@@ -45,7 +44,7 @@ The translation workflow is triggered when users ask the agent to translate an e
 - **Style Profile System**: Before translating the whole book, the agent reads early chapters to analyze the book's genre, tone, and voice, saving a profile to `style_profile.md`. This profile is passed to subagents to ensure consistent tone across all translated chapters.
 - **Checkpoint-based Resumability**: Translated chapters are saved in a temporary directory. If the agent hits a context limit, network error, or simply pauses, re-running the skill will skip already-translated and approved XHTML files.
 - **Bilingual Mode**: An optional mode where the agent interleaves the original text and the translated text with specific CSS classes, ideal for language learners.
-- **Two-Pass In-Memory Self-Reflection & QA**: In `--high-quality` mode, `epub-translator` subagents execute a two-pass in-memory editorial review prior to saving: Pass 1 generates the translation draft, and Pass 2 rigorously inspects and corrects XML attribute syntax, tag hierarchy, completeness, and style profile adherence. Optional secondary review can be conducted using `epub-qa-reviewer`.
+- **Two-Pass In-Memory Self-Reflection & QA**: In `--high-quality` mode, `epub-translator` subagents execute a two-pass in-memory editorial review prior to saving: Pass 1 generates the translation draft, and Pass 2 rigorously inspects and corrects XML attribute syntax, tag hierarchy, completeness, and style profile adherence. This eliminates external orchestrator ping-pong and guarantees high quality upon write.
 
 ## Work Directory & Debugging
 
@@ -66,7 +65,7 @@ When handling user requests or modifying the workflow, keep these limitations in
 Since the core skill is defined purely in Markdown, "development" means editing the instruction files:
 
 - **Changing workflow behavior**: Edit `.agents/skills/awesome-epub-translator/SKILL.md`
-- **Changing subagent behaviors**: Edit `.opencode/agents/epub-translator.md` or `.opencode/agents/epub-qa-reviewer.md`
+- **Changing subagent behaviors**: Edit `.opencode/agents/epub-translator.md`
 - **Changing translation rules**: Edit `.agents/skills/awesome-epub-translator/references/translation-prompt.md`
 - **Testing**: Ask the agent to translate a file and verify the behavior. When making significant prompt or workflow changes, use the `epub-translation-evaluator` skill on the `tests/epub-translation-evaluator/` sample data to objectively A/B test your changes against the previous version.
 
