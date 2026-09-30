@@ -25,5 +25,6 @@
   - 更新核心特色與設計決策，清楚標記 Two-Pass In-Memory Self-Reflection & Editorial QA 機制。
 
 #### Phase 3: 驗證與測試（Evals）
-- [ ] 撰寫單元與整合測試，檢驗 Two-Pass 檢核標準（XML 屬性合法性、標籤階層、目錄父項完整性）。
-- [ ] 執行端到端翻譯驗證。
+- [x] 撰寫單元測試 (`tests/test_two_pass_rules.py`)，驗證 Two-Pass 4 大核心檢核標準（XML 屬性合法性、標題階層、目錄父項完整性、人稱一致性）。
+- [x] 撰寫整合測試 (`tests/test_translated_output_qa.py`)，自動驗證現有產出全部通過 XML 解析與 Two-Pass 規範檢核。
+- [x] 執行全套測試，7 項單元/整合測試全數通過（`Ran 7 tests in 0.005s, OK`）。
