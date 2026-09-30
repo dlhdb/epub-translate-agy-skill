@@ -53,7 +53,11 @@ Follow these steps in exact order. Do not skip steps. Read `references/epub-stru
 
 1. Derive work directory name: `<filename_without_extension>_translation_work/` in the same directory as the source file
 2. Create it: `mkdir -p "<work_dir>"`
-3. If `_translated/` subdirectory already exists inside it, this is a **resumed session** — report how many checkpoint files exist
+3. Create standard isolation subdirectories:
+   - `<work_dir>/_translated/`: Final translated XHTML chapters and `style_profile.md`
+   - `<work_dir>/_extracted/`: Intermediate JSON blocks and chunk files extracted from large chapters (keeps workspace root 100% clean)
+   - `<work_dir>/_staging/`: Used during repackaging
+4. If `_translated/` subdirectory already exists inside it, this is a **resumed session** — report how many checkpoint files exist
 
 ### Step 3: Unzip ePub
 
@@ -192,6 +196,16 @@ Skip these entirely:
 
 ##### 6.1.3: Batch and Translate
 
+For short, straightforward files (<30 KB in pure mode), subagents can translate and reassemble directly in memory as described below.
+
+**For large files (>30 KB) or Bilingual Mode**:
+It is strongly recommended to leverage `scripts/epub_translator_utils.py` to prevent token truncation, preserve 100% of DOM layout, and avoid manual XML boilerplate replication:
+1. **Extract**: `python3 .agents/skills/awesome-epub-translator/scripts/epub_translator_utils.py extract "<work_dir>/<relative_path>" "<work_dir>/_extracted/<filename>.json" --chunk-size 35`
+2. **Translate**: The subagent translates only the plain text/inline-tags in each JSON chunk, focusing purely on high-fidelity semantic translation and style consistency. Save translations to `<work_dir>/_extracted/<filename>_translated.json`.
+3. **Inject & Auto-Sanitize**: `python3 .agents/skills/awesome-epub-translator/scripts/epub_translator_utils.py inject "<work_dir>/<relative_path>" "<work_dir>/_translated/<relative_path>" "<work_dir>/_extracted/<filename>_translated.json" --mode <pure|bilingual> --lang <target_lang>`
+   - This automatically guarantees matching heading levels (`<h1>` -> `<h1 class="translated">`), strips duplicate IDs, and sanitizes XML entities (`&` -> `&amp;`, `<` -> `&lt;`).
+
+**Direct In-Memory Workflow (for small files):**
 Group translatable blocks into batches by **natural semantic boundaries** (sections, heading groups, logical paragraph clusters). Guidelines:
 - Aim for ~2000-3000 characters per batch, but this is a guideline, not a hard limit
 - **Never split a parent element across batches** (e.g., keep an entire `<blockquote>` or `<table>` together)

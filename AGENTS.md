@@ -51,7 +51,10 @@ The translation workflow is triggered when users ask the agent to translate an e
 
 When a translation is in progress, a temporary `<filename>_translation_work/` directory is created alongside the source ePub. This is crucial for debugging if a translation fails:
 - `_translated/`: Contains the generated `style_profile.md` and all successfully translated chapters. Check this folder to verify if translated XHTML files have valid, closed tags.
+- `_extracted/`: Contains intermediate JSON chunks extracted by `epub_translator_utils.py` for large chapters or bilingual assembly.
 - `_staging/`: Used during the repackaging phase before the final zip is created.
+
+**Never write intermediate or translation scripts directly in the workspace root directory.** All intermediary extraction files, translation blocks, and chunk JSONs must stay strictly contained inside `<work_dir>/_extracted/` and `<work_dir>/_translated/`.
 Agents should always investigate this work directory if an ePub fails to repackage or render correctly.
 
 ## Limitations & Edge Cases

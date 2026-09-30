@@ -58,6 +58,23 @@ class TestFormatLinter(unittest.TestCase):
         self.assertGreater(len(errors), 0)
         self.assertIn("Malformed/duplicate attribute 'class'", errors[0])
 
+    def test_duplicate_distinct_attribute_detected(self):
+        content = '<p class="foo" class="bar">Text</p>'
+        errors = check_duplicate_attributes(content)
+        self.assertGreater(len(errors), 0)
+        self.assertIn("Duplicate attribute 'class' in <p> tag", errors[0])
+
+    def test_html_entities_pass_without_error(self):
+        content = """<?xml version="1.0" encoding="utf-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="zh">
+<body>
+  <p>&copy; 2026 Test &mdash; All rights reserved.&nbsp;&hellip;</p>
+  <p>Standard XML: &amp; &lt; &gt; &apos; &quot;</p>
+</body>
+</html>"""
+        errors = check_xml_well_formedness(content)
+        self.assertEqual(len(errors), 0)
+
     def test_heading_demotion_detected(self):
         content = """
         <h2 class="title">Chapter 1</h2>

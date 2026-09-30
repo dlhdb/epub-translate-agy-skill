@@ -12,17 +12,31 @@ can perform targeted, context-aware fixes.
 """
 
 import argparse
+import html.entities
 import json
 import os
 import re
 import sys
 import xml.etree.ElementTree as ET
 
+def resolve_html_entities(text: str) -> str:
+    """Pre-resolves standard HTML named entities to UTF-8 characters to prevent XML ParseError."""
+    def replace_entity(match):
+        ent_name = match.group(1)
+        if ent_name in ("amp", "lt", "gt", "apos", "quot"):
+            return match.group(0)
+        char = html.entities.html5.get(ent_name + ";")
+        if char:
+            return char
+        return match.group(0)
+    return re.sub(r"&([a-zA-Z0-9]+);", replace_entity, text)
+
 def check_xml_well_formedness(content):
     """Checks if the XHTML string is valid XML."""
     errors = []
     try:
-        ET.fromstring(content)
+        sanitized = resolve_html_entities(content)
+        ET.fromstring(sanitized)
     except ET.ParseError as e:
         errors.append(f"XML Parse Error at line {e.position[0]}, column {e.position[1]}: {e}")
     except Exception as e:
@@ -30,15 +44,30 @@ def check_xml_well_formedness(content):
     return errors
 
 def check_duplicate_attributes(content):
-    """Detects malformed attribute concatenation like class="... class="..."."""
+    """Detects duplicate or malformed attribute concatenation (e.g. class="... class="..." or class="a" class="b")."""
     errors = []
     lines = content.splitlines()
-    pattern = re.compile(r'([a-zA-Z:-]+)="[^"]*\b\1="')
+    malformed_pattern = re.compile(r'([a-zA-Z:-]+)="[^"]*\b\1="')
+    tag_pattern = re.compile(r'<([a-zA-Z0-9:-]+)((?:\s+[^>]*?)?)>')
+
     for idx, line in enumerate(lines, start=1):
-        match = pattern.search(line)
-        if match:
-            attr = match.group(1)
+        m = malformed_pattern.search(line)
+        if m:
+            attr = m.group(1)
             errors.append(f"Line {idx}: Malformed/duplicate attribute '{attr}' in: {line.strip()[:100]}")
+        else:
+            for tag_match in tag_pattern.finditer(line):
+                tag_name = tag_match.group(1)
+                tag_body = tag_match.group(2)
+                if not tag_body:
+                    continue
+                attrs = re.findall(r'\b([a-zA-Z:-]+)\s*=', tag_body)
+                seen = set()
+                for a in attrs:
+                    if a in seen:
+                        errors.append(f"Line {idx}: Duplicate attribute '{a}' in <{tag_name}> tag: {line.strip()[:100]}")
+                        break
+                    seen.add(a)
     return errors
 
 def check_heading_hierarchy(content):

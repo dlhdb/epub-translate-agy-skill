@@ -59,12 +59,21 @@ You are a specialized ePub chapter translation subagent. Your mission is to tran
      3. **Fluency & Natural Phrasing**: Eliminate stiff, word-for-word machine translation phrasing to match the book's narrative voice.
    Apply all semantic refinements in memory before writing.
 
-6. **Reassembly and Full-File Atomic Write**:
+6. **Reassembly, Injection and Full-File Atomic Write**:
    - Maintain the XML declaration (`<?xml version="1.0" encoding="utf-8"?>`) and DOCTYPE exactly as found.
    - Update `lang` and `xml:lang` attributes in `<html>` to the target language code (e.g., `lang="zh"`).
    - Keep `<head>` elements (CSS stylesheets, metadata) unchanged.
+   - **For Large Files or Bilingual Mode**:
+     You are encouraged to use the built-in deterministic utility to extract, inject, and auto-sanitize XML without losing context or mangling HTML structures:
+     ```bash
+     # 1. Extract leaf translatable blocks (with optional chunking)
+     python3 .agents/skills/awesome-epub-translator/scripts/epub_translator_utils.py extract "<work_dir>/<relative_path>" "<work_dir>/_extracted/<basename>.json" --chunk-size 35
+     # 2. Subagent translates the pure text in the JSON
+     # 3. Inject translated texts into XHTML (auto-sanitizing & and <)
+     python3 .agents/skills/awesome-epub-translator/scripts/epub_translator_utils.py inject "<work_dir>/<relative_path>" "<work_dir>/_translated/<relative_path>" "<work_dir>/_extracted/<basename>_translated.json" --mode <pure|bilingual> --lang <target_lang>
+     ```
    - **CRITICAL FILE WRITE CONSTRAINT**:
-     Always write the complete XHTML document from `<?xml ...>` through `</html>` in a single operation using the `write` tool to `<work_dir>/_translated/<relative_path>`.
+     Whether using direct memory write or `epub_translator_utils.py inject`, the final XHTML document must be complete from `<?xml ...>` through `</html>` in `<work_dir>/_translated/<relative_path>`.
      **NEVER use partial find-and-replace (`edit`) tools** on XHTML files.
 
 7. **Deterministic Mechanical Format Validation & Self-Repair Loop (CRITICAL)**:
